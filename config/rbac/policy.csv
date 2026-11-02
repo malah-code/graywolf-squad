@@ -1,0 +1,26 @@
+p, viewer, list_workspaces
+p, viewer, list_projects
+p, viewer, list_tasks
+p, viewer, ws_ticket_read
+
+p, developer, create_task
+p, developer, dispatch_task
+p, developer, answer_clarification
+p, developer, reorder_backlog
+p, developer, chat_turn
+p, developer, change_access_mode_pill
+
+p, lead_dev, create_project
+p, lead_dev, trigger_recon
+p, lead_dev, modify_blast_radius
+p, lead_dev, approve_review_gate
+p, lead_dev, create_invite
+p, lead_dev, promote_addon
+
+p, owner, manage_keys
+p, owner, manage_budgets
+p, owner, manage_team_roles
+
+g, owner, lead_dev
+g, lead_dev, developer
+g, developer, viewer

@@ -1,0 +1,527 @@
+openapi: 3.1.0
+info:
+  title: Graywolf Squad Control Plane REST API
+  description: >
+    Official REST and Streaming API contract for Graywolf Squad — the autonomous multi-agent software engineering platform.
+    Enforces stateful session authentication via Better-Auth, PostgreSQL Row-Level Security (RLS) tenancy,
+    and server-authoritative RBAC for the Conversational Chat Cockpit.
+  version: 1.0.0
+  license:
+    name: Elastic License 2.0 (ELv2)
+    url: https://raw.githubusercontent.com/GraywolfSquad/graywolf/main/LICENSE
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local Development Control Plane Gateway (Fastify Port 3000)
+
+security:
+  - SessionCookie: []
+
+paths:
+  # ============================================================================
+  # 1. Authentication & Sessions
+  # ============================================================================
+  /auth/session:
+    get:
+      summary: Get active session context
+      description: Returns the authenticated user profile, active workspace, and RBAC role resolved from Valkey.
+      operationId: getSessionContext
+      responses:
+        '200':
+          description: Active session verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionContext'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      summary: Terminate session
+      description: Invalidates active session in Valkey and PostgreSQL immediately.
+      operationId: logoutSession
+      responses:
+        '200':
+          description: Session invalidated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================================================
+  # 2. Workspaces & Cryptographic Invites
+  # ============================================================================
+  /workspaces:
+    get:
+      summary: List user workspaces
+      operationId: listWorkspaces
+      responses:
+        '200':
+          description: List of accessible workspaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workspace'
+
+  /workspaces/{workspaceId}/invites:
+    post:
+      summary: Create shareable team invite
+      description: Generates high-entropy 32-byte token and persists SHA-256 hash. Requires lead_dev or owner.
+      operationId: createWorkspaceInvite
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetRole, expiresInHours]
+              properties:
+                targetRole:
+                  type: string
+                  enum: [developer, viewer]
+                  default: developer
+                expiresInHours:
+                  type: integer
+                  minimum: 1
+                  maximum: 720
+                  default: 168
+                maxUses:
+                  type: integer
+                  minimum: 1
+                  default: 1
+      responses:
+        '201':
+          description: Invite token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inviteUrl, expiresAt, targetRole]
+                properties:
+                  inviteUrl:
+                    type: string
+                    format: uri
+                    example: "http://localhost:3000/invite/join?token=a1b2c3d4e5f6..."
+                  expiresAt:
+                    type: string
+                    format: date-time
+                  targetRole:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /invites/redeem:
+    post:
+      summary: Redeem workspace invite link
+      operationId: redeemWorkspaceInvite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: Raw 32-byte hex invite token from query parameter
+      responses:
+        '200':
+          description: Successfully joined workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspaceId, role]
+                properties:
+                  workspaceId: { type: string, format: uuid }
+                  role: { type: string, enum: [developer, viewer] }
+        '400':
+          description: Expired or invalid invite token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # 3. Projects & Reconnaissance
+  # ============================================================================
+  /projects:
+    get:
+      summary: List projects in active workspace
+      operationId: listProjects
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      summary: Onboard new project (Greenfield or Brownfield)
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /projects/{projectId}/recon:
+    post:
+      summary: Trigger brownfield reconnaissance scan
+      description: Initiates tree-sitter AST scan, framework detection, and blast-radius proposal.
+      operationId: triggerProjectRecon
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '202':
+          description: Reconnaissance task queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reconJobId, status]
+                properties:
+                  reconJobId: { type: string, format: uuid }
+                  status: { type: string, example: "queued" }
+
+  # ============================================================================
+  # 4. Tasks & DAG Orchestration
+  # ============================================================================
+  /tasks:
+    get:
+      summary: Query task board & DAG items
+      operationId: listTasks
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [BACKLOG, QUEUED, IN_PROGRESS, INTERNAL_REVIEW, QA_GUARD_VERIFYING, AWAITING_CLARIFICATION, REVIEW_GATE, MERGED, CANCELLED]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+    post:
+      summary: Create new engineering task
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+
+  /tasks/{taskId}/dispatch:
+    post:
+      summary: Dispatch task to execution sandbox
+      description: Spawns ephemeral runner container via docker-proxy and mounts worktree. Requires developer+.
+      operationId: dispatchTask
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, status, containerId]
+                properties:
+                  taskId: { type: string }
+                  status: { type: string, example: "IN_PROGRESS" }
+                  containerId: { type: string }
+
+  /tasks/{taskId}/clarification:
+    post:
+      summary: Resolve AWAITING_CLARIFICATION subtask
+      description: Unblocks task, injects answers into turn buffer, and resumes execution container.
+      operationId: answerClarification
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    required: [questionId, answer]
+                    properties:
+                      questionId: { type: string }
+                      answer: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  resumedStatus: { type: string, example: "IN_PROGRESS" }
+
+  /tasks/{taskId}/review-gate/approve:
+    post:
+      summary: Approve 60-second review packet & trigger VCS merge
+      description: Requires lead_dev or owner.
+      operationId: approveReviewGate
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, mergedStatus, prUrl]
+                properties:
+                  taskId: { type: string }
+                  mergedStatus: { type: string, example: "MERGED" }
+                  prUrl: { type: string, format: uri }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ============================================================================
+  # 5. Conversational Chat Cockpit (assistant-ui Gateway)
+  # ============================================================================
+  /chat/turn:
+    post:
+      summary: Execute conversational turn with Chat Agent Cockpit
+      description: >
+        Sends developer prompt to Chat Agent. The model can emit tool calls.
+        All tool calls are intercepted and evaluated server-authoritatively by Fastify against the user's RBAC role.
+      operationId: sendChatTurn
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages, projectId]
+              properties:
+                projectId: { type: string, format: uuid }
+                taskId: { type: string, nullable: true }
+                messages:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ChatMessage'
+      responses:
+        '200':
+          description: Streaming SSE response or single completion
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reply, toolExecutions]
+                properties:
+                  reply: { type: string }
+                  toolExecutions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ToolExecutionRecord'
+
+  # ============================================================================
+  # 6. WebSocket Telemetry Ticket-Granting Token (TGT)
+  # ============================================================================
+  /telemetry/ws-ticket:
+    post:
+      summary: Request Ticket-Granting Token for persistent WebSocket streaming
+      description: >
+        Mint single-use, task-scoped TGT for terminal/Xterm.js streaming and live DAG updates.
+        Valid for 10 seconds client-side with 5-second server grace (15s absolute).
+      operationId: requestWsTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [streamType]
+              properties:
+                streamType:
+                  type: string
+                  enum: [dag_updates, terminal_feed, active_logs]
+                taskId:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticket, ttlSeconds, wsUrl]
+                properties:
+                  ticket: { type: string, format: uuid }
+                  ttlSeconds: { type: integer, example: 10 }
+                  wsUrl: { type: string, example: "ws://localhost:3000/stream?ticket=..." }
+
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: __session
+
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalidated session cookie
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Role lacks required permission for this operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    SessionContext:
+      type: object
+      required: [userId, email, currentWorkspaceId, role]
+      properties:
+        userId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        currentWorkspaceId: { type: string, format: uuid }
+        currentOrganizationId: { type: string, format: uuid }
+        role:
+          type: string
+          enum: [owner, lead_dev, developer, viewer]
+
+    Workspace:
+      type: object
+      required: [id, name, slug, role]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        role: { type: string, enum: [owner, lead_dev, developer, viewer] }
+
+    Project:
+      type: object
+      required: [id, workspaceId, name, slug, mode, gitRemoteUrl]
+      properties:
+        id: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        mode: { type: string, enum: [greenfield, brownfield] }
+        gitRemoteUrl: { type: string }
+        gitProvider: { type: string, enum: [github, gitlab, bitbucket, azure, gitea] }
+
+    CreateProjectRequest:
+      type: object
+      required: [name, slug, mode, gitRemoteUrl]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        mode: { type: string, enum: [greenfield, brownfield] }
+        gitRemoteUrl: { type: string }
+        gitProvider: { type: string, enum: [github, gitlab, bitbucket, azure, gitea], default: github }
+        credentialVaultKey: { type: string }
+
+    Task:
+      type: object
+      required: [id, projectId, title, status, priority]
+      properties:
+        id: { type: string, example: "TASK-101" }
+        projectId: { type: string, format: uuid }
+        title: { type: string }
+        status:
+          type: string
+          enum: [BACKLOG, QUEUED, IN_PROGRESS, INTERNAL_REVIEW, QA_GUARD_VERIFYING, AWAITING_CLARIFICATION, REVIEW_GATE, MERGED, CANCELLED]
+        priority: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        blockedBy: { type: array, items: { type: string } }
+        writableScope: { type: array, items: { type: string } }
+        spendUsd: { type: number, format: float }
+
+    CreateTaskRequest:
+      type: object
+      required: [projectId, title, briefMarkdown]
+      properties:
+        projectId: { type: string, format: uuid }
+        title: { type: string }
+        briefMarkdown: { type: string }
+        priority: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL], default: MEDIUM }
+        blockedBy: { type: array, items: { type: string }, default: [] }
+        writableScope: { type: array, items: { type: string }, default: [] }
+
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [user, assistant, system] }
+        content: { type: string }
+
+    ToolExecutionRecord:
+      type: object
+      required: [toolName, authorized, executed]
+      properties:
+        toolName: { type: string }
+        authorized: { type: boolean }
+        executed: { type: boolean }
+        error: { type: string, nullable: true }
+        result: { type: object, nullable: true }
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: "PERMISSION_DENIED" }
+        message: { type: string }
+        details: { type: object, nullable: true }

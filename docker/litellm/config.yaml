@@ -1,0 +1,37 @@
+# ==============================================================================
+# Graywolf Squad — LiteLLM Virtual Model Routing Configuration
+# Maps internal agent cognitive tiers to provider backends (ADR-003, ADR-056)
+# ==============================================================================
+
+model_list:
+  - model_name: agent-planner
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "Dev-Level-1 Planner (Frontier reasoning model for plan.md authoring)"
+
+  - model_name: agent-coder
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "Dev-Level-3 Implementer (High-throughput code generation model)"
+
+  - model_name: agent-reviewer
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "Dev-Level-2 Reviewer (Adversarial debate model)"
+
+  - model_name: agent-arbiter
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      description: "Neutral Arbiter (Independent model for Escalation Decision Memos)"
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false

@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DelegateRelayResult",
+  "description": "Schema for delegate-relay.result.v1 emitted by isolated agent relay runner",
+  "type": "object",
+  "required": [
+    "version",
+    "taskId",
+    "status",
+    "exitCode",
+    "metrics",
+    "touchedFiles",
+    "agentReport"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["delegate-relay.result.v1"]
+    },
+    "taskId": {
+      "type": "string",
+      "pattern": "^TASK-[0-9A-Z-]+$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "failed", "timeout", "circuit_tripped"]
+    },
+    "exitCode": {
+      "type": "integer"
+    },
+    "signal": {
+      "type": ["string", "null"]
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["durationMs", "peakMemoryBytes"],
+      "properties": {
+        "durationMs": { "type": "number", "minimum": 0 },
+        "peakMemoryBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "touchedFiles": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "agentReport": {
+      "type": "object",
+      "required": ["summary"],
+      "properties": {
+        "summary": { "type": "string" },
+        "divergenceNotes": { "type": "string" }
+      }
+    },
+    "sessionRef": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "name": "graywolfsquad",
+  "version": "1.0.0",
+  "description": "Graywolf Squad Multi-Agent Engineering Platform",
+  "main": "dist/orchestrator/index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "tsx watch src/orchestrator/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src tests --no-error-on-unmatched-pattern",
+    "test": "vitest run",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "prompts:compile": "tsx scripts/prompts-compile.ts"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "multi-agent",
+    "orchestrator",
+    "fastify",
+    "graywolf"
+  ],
+  "author": "Graywolf Squad Team",
+  "license": "ELv2",
+  "type": "commonjs",
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.0.0",
+    "@fastify/helmet": "^13.0.1",
+    "@fastify/websocket": "^11.3.0",
+    "@sinclair/typebox": "^0.34.47",
+    "bullmq": "^5.41.6",
+    "casbin": "^5.39.0",
+    "chokidar": "^3.6.0",
+    "dockerode": "^5.0.1",
+    "fastify": "^5.12.4",
+    "gray-matter": "^4.0.3",
+    "ioredis": "^5.6.1",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.0",
+    "picomatch": "^4.0.2",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3",
+    "pixelmatch": "^5.3.0",
+    "proper-lockfile": "^4.1.2",
+    "ws": "^8.18.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@types/dockerode": "^4.0.1",
+    "@types/node": "^22.13.9",
+    "@types/pg": "^8.11.11",
+    "@types/picomatch": "^4.0.3",
+    "@types/pixelmatch": "5.2.6",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/ws": "^8.5.14",
+    "eslint": "^9.21.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0",
+    "vitest": "^3.0.8"
+  }
+}

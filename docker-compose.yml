@@ -1,0 +1,214 @@
+# ==============================================================================
+# Graywolf Squad — Local Development Docker Compose Topology
+# Architecture: 4-Network Segmentation with Scoped Docker Socket Proxy (ADR-040)
+# License: Elastic License 2.0 (ELv2) / Apache-2.0 Open Core (ADR-019)
+# ==============================================================================
+
+name: graywolf-squad
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Scoped Docker Socket Proxy (Sidecar Daemon Gate)
+  # Shields the host Docker socket from direct exposure to the orchestrator.
+  # ----------------------------------------------------------------------------
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: graywolf-docker-proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1    # Allow create/start/stop/remove/inspect of sandboxes
+      - POST=1          # Allow POST operations (container creation)
+      - NETWORKS=1      # Allow attaching runner containers to runner-net
+      - IMAGES=1        # Allow pulling base runner images
+      - EXEC=0          # Disallow docker exec into arbitrary containers
+      - VOLUMES=0       # Disallow creating arbitrary host volume mounts
+      - SWARM=0
+      - SERVICES=0
+      - INFO=0
+      - AUTH=0
+      - SECRETS=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - daemon-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 2375 || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # 2. Shared PostgreSQL 16 with pgvector
+  # Control-Plane State + Tier 1 Shared Sandboxes (Schema-Isolated)
+  # ----------------------------------------------------------------------------
+  postgres-shared:
+    image: pgvector/pgvector:pg16
+    container_name: graywolf-postgres-shared
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-graywolf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graywolf_dev_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-graywolf_db}
+    volumes:
+      - graywolf_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - control-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-graywolf} -d $${POSTGRES_DB:-graywolf_db}"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 4s
+
+  # ----------------------------------------------------------------------------
+  # 3. Valkey (BSD-3-Clause)
+  # Fast In-Memory Cache for Sessions, Proper-Lockfile, and BullMQ Queues
+  # ----------------------------------------------------------------------------
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    container_name: graywolf-valkey
+    restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - graywolf_valkeydata:/data
+    networks:
+      - control-net
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 5
+      start_period: 2s
+
+  # ----------------------------------------------------------------------------
+  # 4. LiteLLM Proxy (Open Source LLM Gateway & Spend Controller)
+  # Routes model aliases and enforces task budget ceilings.
+  # ----------------------------------------------------------------------------
+  litellm-proxy:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: graywolf-litellm-proxy
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-graywolf}:${POSTGRES_PASSWORD:-graywolf_dev_secret}@postgres-shared:5432/${POSTGRES_DB:-graywolf_db}
+      - STORE_MODEL_IN_DB=True
+    volumes:
+      - ./docker/litellm/config.yaml:/app/config.yaml:ro
+      - graywolf_litellm:/root/.local/share/litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    networks:
+      - control-net
+    depends_on:
+      postgres-shared:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:4000/health/liveliness\")' || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 5. Orchestrator Service (Fastify TypeScript Control Plane)
+  # Dual-Port Listeners:
+  #   - Port 3000: Control Plane REST & Dashboard API (edge-net, control-net)
+  #   - Port 3001: Dedicated Agent Relay Protocol (ARP) WebSocket (runner-net)
+  # ----------------------------------------------------------------------------
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/orchestrator/Dockerfile
+    container_name: graywolf-orchestrator
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - PORT_CONTROL=3000
+      - PORT_ARP=3001
+      - DOCKER_HOST=tcp://docker-proxy:2375
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-graywolf}:${POSTGRES_PASSWORD:-graywolf_dev_secret}@postgres-shared:5432/${POSTGRES_DB:-graywolf_db}
+      - VALKEY_URL=redis://valkey:6379
+      - LITELLM_URL=http://litellm-proxy:4000
+      - RUNNER_DOCKER_NETWORK=graywolf-squad_runner-net
+      - STORAGE_ROOT=/app/storage
+    volumes:
+      - graywolf_task_storage:/app/storage/tasks
+      - graywolf_cache_npm:/home/graywolf/.npm
+    networks:
+      - edge-net      # Published to developer browser
+      - control-net   # Talks to Postgres, Valkey, LiteLLM
+      - daemon-net    # Talks to Scoped Docker Proxy
+      - runner-net    # Receives ARP WebSockets on port 3001 ONLY
+    ports:
+      - "3000:3000"   # Exposed to host workstation
+    depends_on:
+      postgres-shared:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      litellm-proxy:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'require(\"http\").get(\"http://localhost:3000/health\", (r) => process.exit(r.statusCode === 200 ? 0 : 1))'"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 6. Dashboard Web UI (React, Vite, Tailwind, assistant-ui, Xterm.js)
+  # ----------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    container_name: graywolf-dashboard
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    networks:
+      - edge-net
+    ports:
+      - "5173:80"     # Published to developer browser
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+# ==============================================================================
+# Network Definitions (Physical Segmentation)
+# ==============================================================================
+networks:
+  # Public entrypoint for browser dashboard and API
+  edge-net:
+    driver: bridge
+
+  # Fully internal control-plane bus (no outside egress, NO runner attachment)
+  control-net:
+    driver: bridge
+    internal: true
+
+  # Private bridge between Orchestrator and Docker Socket Proxy (2 members only)
+  daemon-net:
+    driver: bridge
+    internal: true
+
+  # Dedicated runner sandbox network (Runner containers spawn dynamically here)
+  runner-net:
+    driver: bridge
+    internal: false   # Permitted internet egress for npm, pip, git clone
+
+# ==============================================================================
+# Persistent Named Volumes
+# ==============================================================================
+volumes:
+  graywolf_pgdata:
+    name: graywolf_pgdata
+  graywolf_valkeydata:
+    name: graywolf_valkeydata
+  graywolf_litellm:
+    name: graywolf_litellm
+  graywolf_task_storage:
+    name: graywolf_task_storage
+  graywolf_cache_npm:
+    name: graywolf_cache_npm

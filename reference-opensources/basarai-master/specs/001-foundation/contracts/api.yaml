@@ -1,0 +1,184 @@
+openapi: 3.1.0
+info:
+  title: Basar AI API - Phase 1 (Foundation)
+  version: 0.1.0
+  description: |
+    Phase 1 endpoints: health check, user profile management.
+    All endpoints except /health require a valid Supabase JWT in the Authorization header.
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development (internal FastAPI)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase access token
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: "Full name must be between 2 and 120 characters"
+            request_id:
+              type: string
+              format: uuid
+              example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-02-08T12:00:00Z"
+
+    ProfileResponse:
+      type: object
+      required: [user_id, email, created_at, updated_at]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          example: "jane@example.com"
+        full_name:
+          type: string
+          nullable: true
+          minLength: 2
+          maxLength: 120
+          example: "Jane Doe"
+        avatar_url:
+          type: string
+          nullable: true
+          format: uri
+          example: "https://example.com/avatar.png"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-01-28T00:00:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-01-28T00:00:00Z"
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+          nullable: true
+          minLength: 2
+          maxLength: 120
+          description: "User's display name. Must be 2-120 characters when provided. Send null to clear."
+          example: "Jane Doe"
+        avatar_url:
+          type: string
+          nullable: true
+          format: uri
+          pattern: "^https?://.+"
+          description: "URL to user's avatar image. Must be a valid HTTP/HTTPS URL when provided. Send null to clear."
+          example: "https://example.com/avatar.png"
+      additionalProperties: false
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns the backend service status. No authentication required.
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /me:
+    get:
+      operationId: getProfile
+      summary: Get current user profile
+      description: |
+        Returns the profile for the authenticated user.
+        A profile row always exists (auto-created at sign-up).
+      tags: [Account]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "401":
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateProfile
+      summary: Update current user profile
+      description: |
+        Updates the authenticated user's profile. Only provided fields are updated.
+        Validation rules:
+        - `full_name`: 2-120 characters (trimmed), or null to clear
+        - `avatar_url`: valid HTTP/HTTPS URL, or null to clear
+      tags: [Account]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  code: VALIDATION_ERROR
+                  message: "Full name must be between 2 and 120 characters"
+                  request_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        "401":
+          description: Missing or invalid authentication token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

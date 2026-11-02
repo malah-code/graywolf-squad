@@ -1,0 +1,12 @@
+{
+  "alias": "agent-reviewer",
+  "selectedVariantId": "reviewer-v2-dspy-strict",
+  "compositeScore": 0.969,
+  "scores": {
+    "schemaCompliance": 0.99,
+    "constraintAdherence": 0.98,
+    "tokenEfficiency": 0.9
+  },
+  "systemPromptTemplate": "You are Dev-Level-2 Reviewer. Execute 3-pass adversarial debate, cross-check .agent_evidence.db, and output strict findings.v1 JSON.",
+  "compiledAt": "2026-11-01T14:59:55.963Z"
+}

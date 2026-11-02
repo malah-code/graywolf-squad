@@ -1,0 +1,247 @@
+# ==============================================================================
+# Graywolf Squad — Production Docker Compose Stack (v0.1.0-p0)
+# Architecture: 4-Network Segmentation with Scoped Docker Socket Proxy (ADR-040)
+# License: Elastic License 2.0 (ELv2) / Apache-2.0 Open Core (ADR-019)
+# ==============================================================================
+
+name: graywolf-production
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Scoped Docker Socket Proxy (Sidecar Daemon Gate)
+  # Strictly isolates the host Docker socket; allows only container lifecycle ops.
+  # ----------------------------------------------------------------------------
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: graywolf-prod-docker-proxy
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1    # Allow create/start/stop/remove/inspect of sandboxes
+      - POST=1          # Allow POST operations (container creation)
+      - NETWORKS=1      # Allow attaching runner containers to runner-net
+      - IMAGES=1        # Allow pulling base runner images
+      - EXEC=0          # Hard-block docker exec into arbitrary containers
+      - VOLUMES=0       # Hard-block creating arbitrary host volume mounts
+      - SWARM=0
+      - SERVICES=0
+      - INFO=0
+      - AUTH=0
+      - SECRETS=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - daemon-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 2375 || exit 1"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # 2. Production PostgreSQL 16 with pgvector
+  # Control-Plane State + Tier 1 Sandboxes + Vector Embeddings
+  # ----------------------------------------------------------------------------
+  postgres-shared:
+    image: pgvector/pgvector:pg16
+    container_name: graywolf-prod-postgres-shared
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-graywolf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-graywolf_db}
+    volumes:
+      - graywolf_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - control-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-graywolf} -d $${POSTGRES_DB:-graywolf_db}"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 4s
+
+  # ----------------------------------------------------------------------------
+  # 3. Production Valkey (BSD-3-Clause)
+  # High-throughput cache for Sessions, Locks, Deduplication, and BullMQ queues
+  # ----------------------------------------------------------------------------
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    container_name: graywolf-prod-valkey
+    restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "yes", "--maxmemory", "${VALKEY_MAXMEMORY:-512mb}", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - graywolf_valkeydata:/data
+    networks:
+      - control-net
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+      start_period: 2s
+
+  # ----------------------------------------------------------------------------
+  # 4. Pre-Boot Database Migration Runner (One-Shot Init Service)
+  # Executes all pending schema migrations idempotently before Orchestrator boots.
+  # ----------------------------------------------------------------------------
+  db-migrate:
+    build:
+      context: .
+      dockerfile: docker/orchestrator/Dockerfile.prod
+    container_name: graywolf-prod-db-migrate
+    restart: "no"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-graywolf}:${POSTGRES_PASSWORD}@postgres-shared:5432/${POSTGRES_DB:-graywolf_db}
+    networks:
+      - control-net
+    depends_on:
+      postgres-shared:
+        condition: service_healthy
+    command: ["sh", "/app/scripts/db-migrate-init.sh"]
+
+  # ----------------------------------------------------------------------------
+  # 5. Production LiteLLM Proxy (Unified Model Gateway & Spend Controller)
+  # ----------------------------------------------------------------------------
+  litellm-proxy:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: graywolf-prod-litellm-proxy
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-graywolf}:${POSTGRES_PASSWORD}@postgres-shared:5432/${POSTGRES_DB:-graywolf_db}
+      - STORE_MODEL_IN_DB=True
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-graywolf-prod-master}
+    volumes:
+      - ./docker/litellm/config.yaml:/app/config.yaml:ro
+      - graywolf_litellm:/root/.local/share/litellm
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    networks:
+      - control-net
+    depends_on:
+      postgres-shared:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:4000/health/liveliness\")' || exit 1"]
+      interval: 4s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 6. Production Orchestrator Service (Fastify TypeScript Control Plane)
+  # Non-Root User (uid: 1001), 4-Network Attachment, Envelope Encrypted Vault
+  # ----------------------------------------------------------------------------
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/orchestrator/Dockerfile.prod
+    container_name: graywolf-prod-orchestrator
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DEPLOYMENT_TOPOLOGY=${DEPLOYMENT_TOPOLOGY:-solo}
+      - PORT_CONTROL=3000
+      - PORT_ARP=3001
+      - DOCKER_HOST=tcp://docker-proxy:2375
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-graywolf}:${POSTGRES_PASSWORD}@postgres-shared:5432/${POSTGRES_DB:-graywolf_db}
+      - VALKEY_URL=redis://valkey:6379
+      - LITELLM_URL=http://litellm-proxy:4000
+      - RUNNER_DOCKER_NETWORK=graywolf-production_runner-net
+      - STORAGE_ROOT=/app/storage
+      - MAX_CONCURRENT_CONTAINERS=${MAX_CONCURRENT_CONTAINERS:-3}
+      - RELAY_JWT_SECRET=${RELAY_JWT_SECRET:?RELAY_JWT_SECRET is required in .env.production}
+      - GRAYWOLF_KEK_PATH=/home/graywolf/.graywolf/master.key
+      - GRAYWOLF_MASTER_KEY_PATH=/home/graywolf/.graywolf/master.key
+      - OTEL_ENABLED=${OTEL_ENABLED:-false}
+    volumes:
+      - graywolf_task_storage:/app/storage/tasks
+      - graywolf_cache_npm:/home/graywolf/.npm
+      - graywolf_keys:/home/graywolf/.graywolf
+    networks:
+      - edge-net      # Published to developer browser / upstream reverse proxy
+      - control-net   # Talks to Postgres, Valkey, LiteLLM
+      - daemon-net    # Talks to Scoped Docker Proxy
+      - runner-net    # Receives ARP WebSockets on port 3001 ONLY
+    ports:
+      - "${PORT_CONTROL:-3000}:3000"
+    depends_on:
+      postgres-shared:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      litellm-proxy:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'require(\"http\").get(\"http://localhost:3000/api/v1/health\", (r) => process.exit(r.statusCode === 200 ? 0 : 1))'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 7. Production Dashboard Web UI (React + Vite served via Hardened Nginx)
+  # ----------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile.prod
+    container_name: graywolf-prod-dashboard
+    restart: unless-stopped
+    networks:
+      - edge-net
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+# ==============================================================================
+# Network Definitions (Physical Segmentation)
+# ==============================================================================
+networks:
+  # Public entrypoint for browser dashboard and API
+  edge-net:
+    driver: bridge
+
+  # Fully internal control-plane bus (no outside egress, NO runner attachment)
+  control-net:
+    driver: bridge
+    internal: true
+
+  # Private bridge between Orchestrator and Docker Socket Proxy (2 members only)
+  daemon-net:
+    driver: bridge
+    internal: true
+
+  # Dedicated runner sandbox network (Runner containers spawn dynamically here)
+  runner-net:
+    driver: bridge
+    internal: false   # Permitted internet egress for npm, pip, git clone
+
+# ==============================================================================
+# Persistent Named Volumes
+# ==============================================================================
+volumes:
+  graywolf_pgdata:
+    name: graywolf_prod_pgdata
+  graywolf_valkeydata:
+    name: graywolf_prod_valkeydata
+  graywolf_litellm:
+    name: graywolf_prod_litellm
+  graywolf_task_storage:
+    name: graywolf_prod_task_storage
+  graywolf_cache_npm:
+    name: graywolf_prod_cache_npm
+  graywolf_keys:
+    name: graywolf_prod_keys
+

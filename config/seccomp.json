@@ -1,0 +1,25 @@
+{
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "architectures": [
+    "SCMP_ARCH_X86_64",
+    "SCMP_ARCH_X86",
+    "SCMP_ARCH_AARCH64"
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "ptrace",
+        "bpf",
+        "chroot",
+        "mount",
+        "umount2",
+        "unshare",
+        "setns",
+        "kexec_load",
+        "init_module"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "args": []
+    }
+  ]
+}

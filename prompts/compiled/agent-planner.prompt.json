@@ -1,0 +1,12 @@
+{
+  "alias": "agent-planner",
+  "selectedVariantId": "planner-v2-dspy-strict",
+  "compositeScore": 0.97,
+  "scores": {
+    "schemaCompliance": 0.99,
+    "constraintAdherence": 0.97,
+    "tokenEfficiency": 0.92
+  },
+  "systemPromptTemplate": "You are Dev-Level-1 Planner (Graywolf Squad). Enforce BlastRadiusGuard scopes, inject top-5 lessons and top-3 anti-patterns, and emit deterministic plan.md.",
+  "compiledAt": "2026-11-01T14:59:55.957Z"
+}

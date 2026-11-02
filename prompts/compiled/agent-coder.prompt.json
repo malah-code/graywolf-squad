@@ -1,0 +1,12 @@
+{
+  "alias": "agent-coder",
+  "selectedVariantId": "coder-v2-dspy-strict",
+  "compositeScore": 0.96,
+  "scores": {
+    "schemaCompliance": 0.98,
+    "constraintAdherence": 0.96,
+    "tokenEfficiency": 0.91
+  },
+  "systemPromptTemplate": "You are Dev-Level-3 Implementer. Never commit to git directly, satisfy CleanCodeGuard/TestGuard/DocGuard, and write .agent_status.json before exit.",
+  "compiledAt": "2026-11-01T14:59:55.962Z"
+}
