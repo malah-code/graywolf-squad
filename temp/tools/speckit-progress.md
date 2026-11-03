@@ -54,6 +54,10 @@ For every phase `P0` … `P16` (defined in `docs/implementation-plan-detailed.md
 | P17 Production Release & Compose | `specs/018-production-release-and-compose/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | P18 Slack, Discord & Teams Addons | `specs/019-slack-and-discord-addons/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | P19 Trajectory Compression & Dataset | `specs/020-trajectory-compression-and-dataset/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| P20 Attention Firewall & Versioned Policy | `specs/021-attention-firewall/` | ✅ | ✅ | ✅ | ☐ | ☐ | ☐ | ☐ |
+| P21 Capacity & Durable Subscriptions | `specs/022-capacity-and-threads/` | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| P22 Relay Ergonomics (5s Shell & Recall) | `specs/023-relay-ergonomics/` | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| P23 Semantic Progress Watchdog | `specs/024-semantic-watchdog/` | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 
 ### Stage B — Implementation statuses (only after Step 7 ✅)
 
@@ -79,6 +83,11 @@ For every phase `P0` … `P16` (defined in `docs/implementation-plan-detailed.md
 | P17 | ✅ | ✅ | ✅ Complete & Converged |
 | P18 | ✅ | ✅ | ✅ Complete & Converged |
 | P19 | ✅ | ✅ | ✅ Complete & Converged |
+| P20 | ☐ | ☐ | 🟡 In Stage A |
+| P21 | ☐ | ☐ | 🔲 Not Started |
+| P22 | ☐ | ☐ | 🔲 Not Started |
+| P23 | ☐ | ☐ | 🔲 Not Started |
+
 
 **Final Phase Status legend**: 🔲 Not Started · 🟡 In Stage A · 🕸 Awaiting Human Approval (Step 7) · 🚧 Implementing (Stage B) · ✅ Complete & Converged
 
@@ -323,6 +332,12 @@ When the human asks anything like *"what is the next step?"*, *"what now?"*, *"c
 - `2026-11-02T02:45Z` | P19 | Step 6 `/speckit-analyze` & Step 7 Human Approval completed → Human lead explicitly commanded `/speckit-implement`; beginning Stage B Step 8 `/speckit-implement`
 - `2026-11-02T02:51Z` | P19 | Step 8 `/speckit-implement` completed → 8/8 tasks T001..T008 executed: implemented `compressHermesTrajectory` & `buildHermesMiddleNarration` with tool-pair boundary protection (`trajectory-compressor.ts`), `computeTrajectorySplit`, `evaluateTrajectoryEligibility` & `harvestEligibleTrajectory` (`trajectory-harvester.ts`), `redactTrajectoryPrivacy`, `convertToShareGptFormat`, `pruneExpiredTrajectoryMonths`, `getDatasetStats` & `exportDatasetJsonl` (`dataset-manager.ts`), `datasetRoutes` (`routes/dataset.ts`), unit test suite (`tests/unit/trajectory-compressor.test.ts`, 5/5 passing), integration test suite (`tests/integration/trajectory-dataset-pipeline.test.ts`, 2/2 passing), and full repo verification (`pnpm typecheck && pnpm lint && pnpm build` clean); Tasks 19.1–19.2 ticked in `docs/implementation-plan-detailed.md`; ready for Step 9 `/speckit-converge`
 - `2026-11-02T02:57Z` | P19 | Step 9 `/speckit-converge` completed → zero actionable findings (0 missing / 0 partial / 0 contradicts / 0 unrequested) across all 8 FRs, 4 SCs, 3 User Stories, and 9 constitution principles; all 516 repository tests passing (494 root + 22 dashboard), 0 lint errors, 0 typecheck errors; `tasks.md` left byte-for-byte unchanged; Phase P19 declared Complete & Converged; ALL TRACK B PHASES (P17–P19) FULLY COMPLETE & CONVERGED
+- `2026-11-02T23:12Z` | P20 | Step 1 Review Plan completed → confirmed Phase 20 scope in `docs/implementation-plan-detailed.md` (Tasks 20.1–20.2: Two-Stage Signal Admission, Admission Context Window Builder, LiteLLM Assessor, Versioned Policy Engine, Task Mandates, Live Diffing `policyEffects`, and Fastify REST Control Plane APIs); ready for Step 2 `/speckit-specify`
+- `2026-11-02T23:13Z` | P20 | Step 2 `/speckit-specify` completed → generated `specs/021-attention-firewall/spec.md` & `specs/021-attention-firewall/checklists/requirements.md` (16/16 checklist items pass); ready for Step 3 `/speckit-clarify` or Step 4 `/speckit-plan`
+- `2026-11-02T23:13Z` | P20 | Step 3 `/speckit-clarify` completed → 5/5 architectural clarifications encoded into `specs/021-attention-firewall/spec.md` (observe mode storing proposals as Decision records without phantom tasks; per-thread trigger coalescing via `Evals.start()`; 2× requeue before `unavailable` fallback; live policy diffing `policyEffects()` via `task.inject`; bounded `admission-context` window builder); 0 critical ambiguities remaining; ready for Step 4 `/speckit-plan`
+
+
+
 
 ```text
 ```

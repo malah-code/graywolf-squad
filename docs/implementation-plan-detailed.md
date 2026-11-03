@@ -980,3 +980,89 @@ GraywolfSquad/
     2. Persist OpenAI-compatible multi-turn tool-calling JSONL files under `.agents/dataset/trajectories/YYYY-MM/<task-id>.jsonl` with monthly rotation, retention pruning, and REST/CLI dataset stats & export endpoints (`/api/v1/projects/:id/dataset/stats`, `/api/v1/projects/:id/dataset/export`).
   - **Verify:** `tests/integration/trajectory-dataset-pipeline.test.ts`.
 
+---
+
+# PHASE 20 — Attention Firewall: Two-Stage Signal Admission, Versioned Policy, Task Mandates & "Needs You" Proposals (`specs/021-attention-firewall`)
+
+**Goal:** Implement the Phase 20 Attention Firewall inspired by DeepSeek's `dsh-superagent-prototype` core engine, protecting human cognitive attention and container compute from signal overload. Incorporates zero-token deterministic gate filtering, bounded LLM context-window evaluation (`admission-context`), immutable cryptographically-versioned `Mandate` grants, and a non-disruptive `observe` mode with a "Needs You" dashboard review card.  
+**Exit Criteria:** Signal policies versioned via SHA-256 hash; deterministic matrix handles unambiguous triggers with zero LLM tokens; Gate 5 Assessor evaluates bounded trigger contexts with strict schema validation; mandates attached to created tasks; policy diffs trigger live task notifications; 100% test coverage with zero unhandled edge cases.
+
+- [ ] **Task 20.1 — Deterministic Gate Matrix, Admission Context Window Builder & Assessor Engine**
+  - **Files:** `packages/agent-runtime/src/admission/model.ts`, `packages/agent-runtime/src/admission/ports.ts`, `packages/agent-runtime/src/admission/matrix.ts`, `packages/agent-runtime/src/admission/evals.ts`, `src/control-plane/admission/context-builder.ts`, `src/control-plane/prompts/admission-assessor.md`
+  - **Steps:**
+    1. Port pure domain contracts (`Trigger`, `ThreadRef`, `Evaluation`, `Decision`, `TriggerDisposition`, `Mandate`, `Strength`) and admission matrix (`listedUnaddressed`, `unlistedAddressed`, `unlistedUnaddressed`) from `reference-opensources/dsh-superagent-prototype-main/src/core/`.
+    2. Build bounded context window extractor (first 5 root messages + ±5 around trigger) and LiteLLM Assessor pipeline with 2× timeout requeue, pause deadline shifting, and `unavailable` fallback.
+  - **Verify:** `tests/unit/admission-engine.test.ts`.
+
+- [ ] **Task 20.2 — Versioned Policy Engine, Task Mandates, Live Diffing (`policyEffects`) & Control Plane REST APIs**
+  - **Files:** `packages/agent-runtime/src/admission/policy.ts`, `migrations/021_attention_firewall.sql`, `src/orchestrator/routes/admission.ts`, `src/control-plane/admission/views.ts`, `src/control-plane/admission/effects.ts`
+  - **Steps:**
+    1. Implement PostgreSQL migration for `signal_policies`, `signal_threads`, `signal_triggers`, `signal_decisions` and add `mandate` JSONB column to `tasks` with RLS.
+    2. Implement `policyVersion()` SHA-256 calculation, `revalidate(mandate)` on task resume, and `policyEffects()` live diffing issuing `task.inject` notices to active containers.
+    3. Expose Fastify REST APIs for policy CRUD, overview dashboard stats, and observed proposal triage (`promote` / `dismiss` / `pause`).
+  - **Verify:** `tests/integration/attention-firewall-api.test.ts`.
+
+---
+
+# PHASE 21 — Capacity Management, Reserved Human Slot & Durable Thread Subscriptions (`specs/022-capacity-and-threads`)
+
+**Goal:** Prevent automated agent workloads from blocking human developer interaction and route multi-turn thread discussions cleanly without redundant re-triage or token waste.  
+**Exit Criteria:** `AdmissionController` enforces `maxWorkers + 1` reserved interactive slot; thread subscriptions accurately differentiate `owner` from read-only `context`; worker `handback()` cleanly rejects out-of-scope follow-ups back to the firewall without task failure.
+
+- [ ] **Task 21.1 — Reserved Human Concurrency Slot (`maxWorkers + 1`) & Soft Pause Gate**
+  - **Files:** `src/orchestrator/services/admission-controller.ts`, `src/orchestrator/queue/task-orchestrator.ts`
+  - **Steps:**
+    1. Update concurrency controller with hard capacity `N + 1` reserving the extra slot strictly for human explicit messages or active task status wakes.
+    2. Implement soft pause gate preserving running tasks while halting new intake and shifting evaluation deadlines.
+  - **Verify:** `tests/unit/capacity-concurrency.test.ts`.
+
+- [ ] **Task 21.2 — Durable Thread Subscriptions, Pass-Through Routing & Worker Mandate `handback()` Tool**
+  - **Files:** `migrations/022_thread_subscriptions.sql`, `src/orchestrator/services/thread-subscription-service.ts`, `src/relay/relay.mjs`
+  - **Steps:**
+    1. Add `thread_subscriptions` table with `owner` and `context` modes, routing incoming comments directly to active worker sessions.
+    2. Add `handback` tool to worker container runtime: when a follow-up exceeds `task.mandate.scope`, worker yields cleanly with reason `exceeds_mandate_scope` and routes trigger to firewall.
+  - **Verify:** `tests/integration/thread-subscriptions.test.ts`.
+
+---
+
+# PHASE 22 — Relay Ergonomics: 5-Second Auto-Backgrounding Shell & Spill-at-Write Context Pointers (`specs/023-relay-ergonomics`)
+
+**Goal:** Upgrade container execution ergonomics in `src/relay/relay.mjs` by eliminating shell timeouts on build/server commands and preserving ADR-061 prompt cache prefix immutability against large tool outputs.  
+**Exit Criteria:** Foreground `bash_execute` detaches to `bgJobs` after 5,000ms with job handle and preview; tool outputs >1,000 tokens are spilled at write to `/scratch/spill/` with head/tail summary and `recall_context` pointer; zero KV-cache invalidation.
+
+- [ ] **Task 22.1 — 5-Second Auto-Backgrounding Child Process State Machine & Background Job Tools in `relay.mjs`**
+  - **Files:** `src/relay/relay.mjs`, `packages/agent-runtime/src/relay/types.ts`
+  - **Steps:**
+    1. Implement 5,000ms foreground race on `bash_execute`: if running after 5s, detach child process into `bgJobs` map, assign UUID, return immediate status with stdout preview.
+    2. Implement `check_bg_job(job_id)` and `kill_bg_job(job_id)` tools with 30-min max TTL watchdog and 10s shutdown drain.
+  - **Verify:** `tests/unit/relay-auto-backgrounding.test.ts`.
+
+- [ ] **Task 22.2 — Spill-at-Write Context Pointers (`recall_<uuid>.log`) & Cache-Stable Recall Tool**
+  - **Files:** `src/relay/relay.mjs`, `src/orchestrator/services/context-engine.ts`
+  - **Steps:**
+    1. Implement spill-at-write check in `relay.mjs`: when stdout/stderr exceeds 4,000 characters, persist full output to `/scratch/spill/recall_<uuid>.log` and return head/tail preview stub.
+    2. Expose `recall_context(recall_id, start_line, end_line)` tool allowing agents to page through spilled logs on demand without polluting prompt history.
+  - **Verify:** `tests/unit/spill-recall-pointers.test.ts`.
+
+---
+
+# PHASE 23 — Semantic Progress Watchdog & Out-of-Band Agent Stalling Prevention (`specs/024-semantic-watchdog`)
+
+**Goal:** Implement an out-of-band progress monitor that detects semantic deadlocks (e.g. repeated edits failing the same test suite) before container budgets are exhausted.  
+**Exit Criteria:** BullMQ Watchdog worker monitors active tasks out-of-band; deterministic heuristic triggers analytical LLM evaluation; agent receives `watchdog.nudge` or is safely halted for Dev-Level-1 escalation.
+
+- [ ] **Task 23.1 — BullMQ Out-of-Band Watchdog Worker & Multi-Turn Test Progression Heuristics**
+  - **Files:** `src/orchestrator/queue/watchdog-worker.ts`, `src/orchestrator/services/evidence-ledger-service.ts`
+  - **Steps:**
+    1. Create BullMQ `WatchdogWorker` polling active tasks every 60s.
+    2. Track consecutive test failure counts and cost/time spend plateaus in `.agent_evidence.db`.
+  - **Verify:** `tests/unit/watchdog-worker.test.ts`.
+
+- [ ] **Task 23.2 — LiteLLM Analytical Loop Evaluator & ARP `watchdog.nudge` / Halt Interventions**
+  - **Files:** `src/orchestrator/services/watchdog-evaluator.ts`, `src/orchestrator/services/task-orchestrator.ts`
+  - **Steps:**
+    1. When heuristic flags a stall, query LiteLLM with diff and test history to evaluate if agent is in a semantic loop.
+    2. Issue ARP `watchdog.nudge` message or trigger level-1 escalation halt with checkpointed state.
+  - **Verify:** `tests/integration/semantic-watchdog.test.ts`.
+
+
