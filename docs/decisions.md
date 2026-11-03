@@ -2122,4 +2122,48 @@ Graywolf is already designed for MENA/Egyptian use cases (Egyptian 14% VAT + Ara
   - Guarantees zero docs-to-code drift in generated PR summaries and documentation.
   - Establishes a permanent closed-loop learning mechanism against recurring LLM failure modes.
 
+---
+
+## ADR-084: DeepSeek Superagent Integration & Track C Operational Mastery (Phases 20–23)
+
+- **Date**: 2026-11-02
+- **Status**: Accepted
+- **Context**:
+  - On October 31, 2026, DeepSeek released the open-source `dsh-superagent-prototype` (MIT License) demonstrating an autonomous agent harness architecture based on the **Attention Scarcity Rule**: *"take as little human attention as possible and give as much value as possible"*.
+  - Empirical benchmarks demonstrated that a Router-Worker split with two-stage event filtering cut 95th-percentile (p95) completion time nearly in half (15.7m vs 29.5m) and dynamic batching under load dropped triage decision latency from 6.4s down to 1.6s.
+  - Graywolf conducted a complete code-level audit of the prototype (`reference-opensources/dsh-superagent-prototype-main`, 216 files, 15,205 LOC TypeScript). The domain core (`src/core/`) is 100% framework-free (`node:crypto` only) and `src/policy.ts` is pure.
+  - However, the raw prototype suffers from critical security risks: workers run with `danger-full-access` on the host OS user account, it is hardcoded to a single GitHub repo, and its runtime layer is tightly coupled to alpha `@deepseek-ai/cordis` packages.
+- **Decision**:
+  1. **Strict Reject & Isolation (ADR-038 Compliance)**:
+     - STRICTLY REJECT host-user execution and Cordis/DSH NPM dependencies. Graywolf's ephemeral Docker/Podman container sandboxes (`--read-only`, `--cap-drop=ALL`, UID 10001, `runner-net` isolation) and multi-tenant PostgreSQL schema remain non-negotiable.
+     - Untrack `reference-opensources/` from Git while keeping local files on disk for reference.
+  2. **Adopt & Adapt via Track C (Phases 20–23)**:
+     - **Phase 20 (`specs/021-attention-firewall`) — Attention Firewall & Versioned Admission Policy**:
+       - *Stage 1 Deterministic Gate (0 Tokens)*: Filter webhooks against actor allowlists, ignored assignees (e.g. "Mohamed"), required/excluded labels, and admission matrix classifications (`listedUnaddressed`, `unlistedAddressed`, `unlistedUnaddressed`).
+       - *Stage 2 LiteLLM Assessor (Gate 5)*: Bounded context window builder (first 5 root messages + ±5 around trigger, max 4,000 tokens) with strict JSON schema validation, 1-to-1 rule matching, and 2× requeue before `unavailable` fallback.
+       - *Per-Thread Coalescing*: Incoming triggers on the same thread queue into `thread.pending` and evaluate in a single batched `Evaluation` run.
+       - *Observe Mode*: Record `Decision{kind:'ignore', reason:'observed', proposal}` rendered in the UI as a "Needs You" review card without spinning up phantom containers.
+       - *Cryptographic Policy & Mandates*: SHA-256 `policyVersion()`, immutable `tasks.mandate` JSONB, and `policyEffects()` live diffing issuing `task.inject` notices.
+     - **Phase 21 (`specs/022-capacity-and-threads`) — Capacity Management & Durable Threads**:
+       - *Reserved Human Concurrency Slot*: `AdmissionController` enforces hard capacity `maxWorkers + 1`, reserving the extra slot strictly for human explicit messages or active task status wakes so automated jobs never block human interactions.
+       - *Durable Thread Subscriptions*: PostgreSQL `thread_subscriptions` table differentiating `owner` (direct write authority) from `context` (passive read-only background context).
+       - *Worker Mandate `handback()`*: Worker tool in container runtime that yields gracefully with `exceeds_mandate_scope` when follow-ups exceed `task.mandate.scope`.
+     - **Phase 22 (`specs/023-relay-ergonomics`) — Relay Ergonomics & Prompt Cache Immutability**:
+       - *5-Second Auto-Backgrounding Shell*: Native child process race in `src/relay/relay.mjs`: commands exceeding 5,000ms detach into `bgJobs` with a UUID handle, stdout preview, 30-min TTL watchdog, and 10s shutdown drain (`check_bg_job`, `kill_bg_job`).
+       - *Spill-at-Write Context Pointers*: Tool outputs >1,000 tokens (4,000 chars) are immediately spilled to `/scratch/spill/recall_<uuid>.log` at creation time with head/tail stubs, preserving **ADR-061 prompt cache prefix immutability** and exposed via `recall_context()`.
+     - **Phase 23 (`specs/024-semantic-watchdog`) — Semantic Progress Watchdog**:
+       - *Out-of-Band BullMQ Worker*: Monitors active tasks every 60s; triggers when task consumes >50% budget or >10m with non-decreasing failing test counts in `EvidenceLedger`.
+       - *Analytical Model Check & ARP Intervention*: Dispatches reasoning check against `plan.md` tasks; issues ARP `watchdog.nudge` or checkpoint-and-halt escalation to Dev-Level-1.
+- **Alternatives Considered**:
+  - *Transplanting upstream's ticket/assignment engine*: Rejected. Upstream tickets duplicate Graywolf's 16-state task machine and orchestration DAG.
+  - *Compacting prompt messages 5 turns later*: Rejected. Mutating older tool outputs in chat history invalidates KV cache prefixes in frontier models. Spilling at write time ensures immutability.
+- **Consequences**:
+  - Eliminates human attention fatigue by filtering >85% of webhook noise deterministically before LLM invocation.
+  - Prevents automated ticket storms from blocking human developer interaction via the `+1` interactive slot.
+  - Guarantees complete auditability of task authority via cryptographically versioned `Mandate` grants.
+  - Fixes command timeout hangs on dev servers and large builds in `relay.mjs`.
+  - Protects KV-cache hit rates and context limits against bloated tool outputs.
+  - Catches semantic agent loops before budgets are wasted.
+
+
 

@@ -31,8 +31,13 @@
    - **Chat as Active Cockpit**: Natural language chat has tool-calling authority over tasks, scheduling, dependencies (`blockedBy`), and container execution.
    - **Non-Committing Relay Contract**: Agents NEVER commit to Git upstream directly. All work ends in a verified patch diff and test report.
    - **Stack Baseline**: Fastify (TS), PostgreSQL 16 + `pgvector`, Valkey + BullMQ, LiteLLM Proxy, React + Vite + Tailwind + Shadcn + React Flow.
+   - **Track C: Attention & Operational Mastery (Phases 20–23)**:
+     - **P20 (`specs/021-attention-firewall`)**: Attention Firewall, 0-token deterministic gate, bounded Assessor (Gate 5), Observe mode ("Needs You" triage), SHA-256 versioned policy, immutable task mandates, and live `policyEffects()`.
+     - **P21 (`specs/022-capacity-and-threads`)**: Concurrency management, `maxWorkers + 1` reserved human interactive slot, durable thread subscriptions (`owner` vs `context`), pass-through PR comment routing, and worker `handback()` tool.
+     - **P22 (`specs/023-relay-ergonomics`)**: 5-second auto-backgrounding shell state machine in `relay.mjs`, and Spill-at-Write context recall pointers (`recall_<uuid>.log`) preserving ADR-061 prompt cache prefix immutability.
+     - **P23 (`specs/024-semantic-watchdog`)**: Out-of-band BullMQ progress watchdog detecting semantic deadlocks / non-decreasing test failures with ARP `watchdog.nudge` or level-1 escalation.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan at `specs/020-trajectory-compression-and-dataset/plan.md`
+shell commands, and other important information, read the active spec at `specs/021-attention-firewall/spec.md`
 <!-- SPECKIT END -->

@@ -96,3 +96,4 @@ A developer wants to view an overview of signal traffic, inspect observed propos
 - **Database**: PostgreSQL 16 with Row-Level Security (`project_id = current_setting('app.current_project_id')::uuid`).
 - **LLM Gateway**: LiteLLM proxy configured with router model alias for Gate 5 structured assessment.
 - **Framework Cleanliness**: Core admission domain in `packages/agent-runtime/src/admission/` MUST depend only on `node:crypto` and standard TypeScript / Zod schemas; zero Cordis runtime dependencies.
+

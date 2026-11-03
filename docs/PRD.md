@@ -854,3 +854,52 @@ A Valkey flush or restart never exposes long-lived credentials; a `pg_dump` neve
 | `@graywolf/addon-slack-cockpit` | CockpitAddon | Slack HITL triage channel | P2 |
 | `@graywolf/addon-msteams-cockpit` | CockpitAddon | MS Teams HITL triage channel | P3 |
 
+---
+
+## 18. Attention Firewall & High-Throughput Autonomous Operations (Track C)
+
+### 18.1 Vision & The Attention Scarcity Rule
+
+As Graywolf Squad operates as an autonomous software factory ingesting multi-channel signals (GitHub, Slack, Discord, Sentry), human developers easily become the cognitive bottleneck if forced to monitor noisy feeds or triage phantom agent tasks. The platform adopts the **Attention Scarcity Rule**: *"take as little human attention as possible and give as much value as possible"*.
+
+Track C (Phases 20–23) establishes the operational infrastructure required to run high-throughput agent swarms without exhausting human attention or container budgets:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              TRACK C: OPERATIONAL PHASES                               │
+├─────────┬──────────────────────────────────┬───────────────────────────────────────────┤
+│ Phase   │ Name                             │ Core Capabilities                         │
+├─────────┼──────────────────────────────────┼───────────────────────────────────────────┤
+│ P20     │ Attention Firewall & Policy      │ 0-token deterministic gate, bounded Gate  │
+│         │ (specs/021-attention-firewall)   │ 5 Assessor, per-thread batching, Observe  │
+│         │                                  │ mode, SHA-256 policy, task Mandates, diff.│
+├─────────┼──────────────────────────────────┼───────────────────────────────────────────┤
+│ P21     │ Capacity & Durable Threads       │ maxWorkers + 1 reserved human slot, soft  │
+│         │ (specs/022-capacity-and-threads) │ pause, owner vs context subscriptions,    │
+│         │                                  │ worker mandate handback() tool.           │
+├─────────┼──────────────────────────────────┼───────────────────────────────────────────┤
+│ P22     │ Relay Ergonomics                 │ 5s auto-backgrounding shell (bash_execute,│
+│         │ (specs/023-relay-ergonomics)     │ check_bg_job, kill_bg_job), Spill-at-Write│
+│         │                                  │ context recall pointers (recall_<uuid>).  │
+├─────────┼──────────────────────────────────┼───────────────────────────────────────────┤
+│ P23     │ Semantic Progress Watchdog       │ Out-of-band BullMQ progress monitor, loop │
+│         │ (specs/024-semantic-watchdog)    │ detection on test failure plateaus, ARP   │
+│         │                                  │ watchdog.nudge or level-1 escalation.     │
+└─────────┴──────────────────────────────────┴───────────────────────────────────────────┘
+```
+
+### 18.2 Admission Policy Modes & "Needs You" Proposal Triage
+
+1. **`mode: 'off'`**: Inferred or ambiguous triggers are strictly dropped. Only explicit direct human mentions trigger tasks.
+2. **`mode: 'observe'`**: Inferred signals passing the Assessor do not launch containers. The system records a `Decision` with `verdict: 'ignore'`, `reason_code: 'observed'`, and a populated `proposal: { title, scope, worktree_name }`. These surface in the Cockpit UI as a "Needs You / Observed Proposals" card where operators can promote or dismiss them with one click.
+3. **`mode: 'auto'`**: Autonomous execution. Inferred signals passing all rules issue an immutable `Mandate` and immediately enqueue a task.
+
+### 18.3 Reserved Human Concurrency Slot (`maxWorkers + 1`)
+
+Automated tasks must never block real-time human intervention. When background worker concurrency reaches the configured limit `N`, the `AdmissionController` preserves a dedicated `+1` slot exclusively for explicit human chat commands or status queries. Automated background triggers remain queued in BullMQ until capacity frees.
+
+### 18.4 Spill-at-Write & Prompt Cache Prefix Immutability (ADR-061 & ADR-084)
+
+Large command logs (>1,000 tokens) are spilled to `/scratch/spill/recall_<uuid>.log` at the moment of tool execution, returning a head/tail summary and a recall pointer. Because the tool result message in the chat history is written once and never mutated, the model's KV prompt cache prefix remains valid across subsequent turns.
+
+
