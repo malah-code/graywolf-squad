@@ -54,7 +54,7 @@ For every phase `P0` … `P16` (defined in `docs/implementation-plan-detailed.md
 | P17 Production Release & Compose | `specs/018-production-release-and-compose/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | P18 Slack, Discord & Teams Addons | `specs/019-slack-and-discord-addons/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | P19 Trajectory Compression & Dataset | `specs/020-trajectory-compression-and-dataset/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| P20 Attention Firewall & Versioned Policy | `specs/021-attention-firewall/` | ✅ | ✅ | ✅ | ☐ | ☐ | ☐ | ☐ |
+| P20 Attention Firewall & Versioned Policy | `specs/021-attention-firewall/` | ✅ | ✅ | ✅ | ✅ | ☐ | ☐ | ☐ |
 | P21 Capacity & Durable Subscriptions | `specs/022-capacity-and-threads/` | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | P22 Relay Ergonomics (5s Shell & Recall) | `specs/023-relay-ergonomics/` | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
 | P23 Semantic Progress Watchdog | `specs/024-semantic-watchdog/` | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
@@ -335,6 +335,8 @@ When the human asks anything like *"what is the next step?"*, *"what now?"*, *"c
 - `2026-11-02T23:12Z` | P20 | Step 1 Review Plan completed → confirmed Phase 20 scope in `docs/implementation-plan-detailed.md` (Tasks 20.1–20.2: Two-Stage Signal Admission, Admission Context Window Builder, LiteLLM Assessor, Versioned Policy Engine, Task Mandates, Live Diffing `policyEffects`, and Fastify REST Control Plane APIs); ready for Step 2 `/speckit-specify`
 - `2026-11-02T23:13Z` | P20 | Step 2 `/speckit-specify` completed → generated `specs/021-attention-firewall/spec.md` & `specs/021-attention-firewall/checklists/requirements.md` (16/16 checklist items pass); ready for Step 3 `/speckit-clarify` or Step 4 `/speckit-plan`
 - `2026-11-02T23:13Z` | P20 | Step 3 `/speckit-clarify` completed → 5/5 architectural clarifications encoded into `specs/021-attention-firewall/spec.md` (observe mode storing proposals as Decision records without phantom tasks; per-thread trigger coalescing via `Evals.start()`; 2× requeue before `unavailable` fallback; live policy diffing `policyEffects()` via `task.inject`; bounded `admission-context` window builder); 0 critical ambiguities remaining; ready for Step 4 `/speckit-plan`
+- `2026-11-05T20:21Z` | P20 | Step 4 `/speckit-plan` completed → generated `specs/021-attention-firewall/plan.md`, `research.md`, `data-model.md`, `contracts/admission-api.md`, `quickstart.md`, and updated `AGENTS.md` active plan pointer; ready for Step 5 `/speckit-tasks`
+
 
 
 

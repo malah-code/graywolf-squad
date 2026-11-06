@@ -39,5 +39,5 @@
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the active spec at `specs/021-attention-firewall/spec.md`
+shell commands, and other important information, read the current plan at `specs/021-attention-firewall/plan.md`
 <!-- SPECKIT END -->
