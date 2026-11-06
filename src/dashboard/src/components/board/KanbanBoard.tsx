@@ -109,9 +109,14 @@ export interface KanbanBoardProps {
   tasks?: KanbanTaskItem[];
   goal?: string;
   onTaskClick?: (taskId: string) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMaximized?: boolean;
+  onToggleMaximize?: () => void;
+  headerActions?: React.ReactNode;
 }
 
-const DEFAULT_TASKS: KanbanTaskItem[] = [
+export const DEFAULT_TASKS: KanbanTaskItem[] = [
   { id: 'TASK-101', title: 'Fastify Vercel AI SDK route', status: 'IN_PROGRESS', priority: 'HIGH', spendUsd: 0.042 },
   { id: 'TASK-102', title: 'Socratic Grilling Prompt', status: 'INTERNAL_REVIEW', priority: 'HIGH', spendUsd: 0.018 },
   { id: 'TASK-103', title: 'Playwright Visual Regression', status: 'BACKLOG', priority: 'MEDIUM', spendUsd: 0 },
@@ -125,6 +130,11 @@ export function KanbanBoard({
   tasks = DEFAULT_TASKS,
   goal = 'Build next-generation autonomous software engineering platform with dual modes and cognitive tiers',
   onTaskClick,
+  isCollapsed = false,
+  onToggleCollapse,
+  isMaximized = false,
+  onToggleMaximize,
+  headerActions,
 }: KanbanBoardProps): React.ReactElement {
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const viewConfig = getKanbanColumnsForView({ persona, projectMode, userRole });
@@ -136,7 +146,7 @@ export function KanbanBoard({
     const totalSpend = tasks.reduce((sum, t) => sum + t.spendUsd, 0);
 
     return (
-      <div data-testid="viewer-dashboard" className="flex flex-col h-full bg-slate-950 text-slate-100 p-6 space-y-6">
+      <div data-testid="viewer-dashboard" className="flex flex-col h-full bg-slate-950 text-slate-100 p-6 space-y-6 overflow-y-auto">
         <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
           <div>
             <span className="text-xs uppercase font-bold text-sky-400">Stakeholder Executive Dashboard</span>
@@ -197,79 +207,167 @@ export function KanbanBoard({
     );
   }
 
-  // Developer or Maker Kanban Board
-  return (
-    <div data-testid="kanban-board" data-view-mode={viewConfig.viewMode} className="flex flex-col h-full bg-slate-950 text-slate-200 overflow-hidden">
-      {/* Board Header */}
-      <div className="flex items-center justify-between p-3 border-b border-slate-800 bg-slate-900/60">
-        <div className="flex items-center space-x-3">
+  // Collapsed header bar mode
+  if (isCollapsed) {
+    return (
+      <div
+        data-testid="kanban-board-collapsed"
+        className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800 cursor-pointer hover:bg-slate-800/80 transition select-none flex-shrink-0"
+        onClick={onToggleCollapse}
+      >
+        <div className="flex items-center space-x-2.5">
+          <span>{viewConfig.viewMode === 'maker' ? '🎨' : '⚙️'}</span>
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            {viewConfig.viewMode === 'maker' ? '🎨 Maker Kanban Board (5 Columns)' : '⚙️ Developer Kanban Board (8 Columns)'}
+            {viewConfig.viewMode === 'maker' ? 'Maker Kanban Board (5 Columns)' : 'Developer Kanban Board (8 Columns)'}
           </h3>
           <span className="font-mono text-xs text-sky-400">[{tasks.length} tasks]</span>
         </div>
-
-        {/* Maker Technical Details Toggle */}
-        {viewConfig.viewMode === 'maker' && (
+        <div className="flex items-center space-x-2">
           <button
             type="button"
-            data-testid="toggle-tech-details-btn"
-            onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
-            className="rounded bg-slate-800 px-2.5 py-1 text-xs text-slate-300 border border-slate-700 hover:text-white transition"
+            data-testid="expand-kanban-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse?.();
+            }}
+            className="flex items-center space-x-1 text-xs text-sky-400 hover:text-sky-300 font-medium px-2 py-0.5 rounded bg-sky-950/80 border border-sky-800 hover:bg-sky-900 transition"
           >
-            {showTechnicalDetails ? 'Hide Technical Details' : 'Show Technical Details'}
+            <span>▲ Expand</span>
           </button>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  // Full Developer or Maker Kanban Board
+  return (
+    <div
+      data-testid="kanban-board"
+      data-view-mode={viewConfig.viewMode}
+      className="flex flex-col h-full min-h-0 bg-slate-950 text-slate-200 overflow-hidden"
+    >
+      {/* Board Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 bg-slate-900/80 flex-shrink-0">
+        <div className="flex items-center space-x-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+            <span>{viewConfig.viewMode === 'maker' ? '🎨' : '⚙️'}</span>
+            <span>
+              {viewConfig.viewMode === 'maker' ? 'Maker Kanban Board (5 Columns)' : 'Developer Kanban Board (8 Columns)'}
+            </span>
+          </h3>
+          <span className="font-mono text-xs text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/60">
+            [{tasks.length} tasks]
+          </span>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          {/* Maker Technical Details Toggle */}
+          {viewConfig.viewMode === 'maker' && (
+            <button
+              type="button"
+              data-testid="toggle-tech-details-btn"
+              onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+              className="rounded bg-slate-800 px-2.5 py-1 text-xs text-slate-300 border border-slate-700 hover:text-white transition"
+            >
+              {showTechnicalDetails ? 'Hide Technical Details' : 'Show Technical Details'}
+            </button>
+          )}
+
+          {headerActions}
+
+          {onToggleMaximize && (
+            <button
+              type="button"
+              data-testid="maximize-kanban-btn"
+              onClick={onToggleMaximize}
+              className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800/80 border border-slate-700 hover:bg-slate-700 transition"
+              title={isMaximized ? 'Restore normal view' : 'Maximize Kanban Board'}
+            >
+              {isMaximized ? '◱ Restore' : '⛶ Maximize'}
+            </button>
+          )}
+
+          {onToggleCollapse && (
+            <button
+              type="button"
+              data-testid="collapse-kanban-btn"
+              onClick={onToggleCollapse}
+              className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800/80 border border-slate-700 hover:bg-slate-700 transition"
+              title="Collapse Kanban Board"
+            >
+              ▼ Collapse
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Columns Grid */}
-      <div className="flex-1 flex overflow-x-auto p-3 space-x-3">
+      <div className="flex-1 min-h-0 flex overflow-x-auto p-3 space-x-3">
         {viewConfig.columns.map((column) => {
           const columnTasks = tasks.filter((t) => column.statuses.includes(t.status));
           return (
             <div
               key={column.id}
               data-testid={`kanban-column-${column.id}`}
-              className="w-72 flex-shrink-0 flex flex-col rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden"
+              className="w-72 flex-shrink-0 flex flex-col rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden min-h-0 shadow-sm"
             >
-              <div className="flex items-center justify-between p-2.5 border-b border-slate-800 bg-slate-900">
+              <div className="flex items-center justify-between p-2.5 border-b border-slate-800 bg-slate-900/90 flex-shrink-0">
                 <span className="text-xs font-bold text-slate-300">{column.title}</span>
-                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-slate-400">
+                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-slate-400 border border-slate-700/60">
                   {columnTasks.length}
                 </span>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                {columnTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    data-testid={`kanban-task-${task.id}`}
-                    onClick={() => onTaskClick && onTaskClick(task.id)}
-                    className="p-3 rounded-lg bg-slate-950 border border-slate-800/80 hover:border-sky-700/80 cursor-pointer shadow-sm transition space-y-2"
-                  >
-                    <div className="flex items-center justify-between text-[11px]">
-                      <code dir="ltr" className="font-mono text-sky-400">{task.id}</code>
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                        task.priority === 'CRITICAL' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-slate-800 text-slate-300'
-                      }`}>
-                        {task.priority}
-                      </span>
-                    </div>
-
-                    <p className="text-xs font-semibold text-slate-200">{task.title}</p>
-
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-900 font-mono">
-                      <span>Status: {task.status}</span>
-                      <span>${task.spendUsd.toFixed(3)}</span>
-                    </div>
-
-                    {showTechnicalDetails && (
-                      <div data-testid="technical-details-box" className="text-[10px] text-purple-300 bg-purple-950/40 p-1.5 rounded border border-purple-900/50 font-mono">
-                        AST Diff: verified by Tree-sitter | Tier: {task.assignedTier || 'implementer'}
-                      </div>
-                    )}
+              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                {columnTasks.length === 0 ? (
+                  <div className="h-16 flex items-center justify-center rounded-lg border border-dashed border-slate-800/70 text-[11px] text-slate-500 font-mono">
+                    Empty
                   </div>
-                ))}
+                ) : (
+                  columnTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      data-testid={`kanban-task-${task.id}`}
+                      onClick={() => onTaskClick && onTaskClick(task.id)}
+                      className="p-3 rounded-lg bg-slate-950 border border-slate-800/90 hover:border-sky-500/80 hover:shadow-md cursor-pointer transition space-y-2 group"
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <code dir="ltr" className="font-mono text-sky-400 font-bold group-hover:text-sky-300">
+                          {task.id}
+                        </code>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            task.priority === 'CRITICAL'
+                              ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                              : task.priority === 'HIGH'
+                              ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
+                              : 'bg-slate-800 text-slate-300'
+                          }`}
+                        >
+                          {task.priority}
+                        </span>
+                      </div>
+
+                      <p className="text-xs font-semibold text-slate-200 line-clamp-2 leading-relaxed">
+                        {task.title}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-slate-900 font-mono">
+                        <span className="text-slate-400">Status: <span className="text-slate-300 font-semibold">{task.status}</span></span>
+                        <span className="text-emerald-400 font-semibold">${task.spendUsd.toFixed(3)}</span>
+                      </div>
+
+                      {showTechnicalDetails && (
+                        <div
+                          data-testid="technical-details-box"
+                          className="text-[10px] text-purple-300 bg-purple-950/40 p-1.5 rounded border border-purple-900/50 font-mono"
+                        >
+                          AST Diff: verified by Tree-sitter | Tier: {task.assignedTier || 'implementer'}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           );

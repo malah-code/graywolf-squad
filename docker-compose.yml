@@ -91,6 +91,11 @@ services:
     restart: unless-stopped
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-graywolf-dev-master}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - ./docker/litellm/config.yaml:/app/config.yaml:ro
       - graywolf_litellm:/root/.local/share/litellm
