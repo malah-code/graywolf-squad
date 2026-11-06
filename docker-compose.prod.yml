@@ -108,8 +108,6 @@ services:
     container_name: graywolf-prod-litellm-proxy
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-graywolf}:${POSTGRES_PASSWORD}@postgres-shared:5432/${POSTGRES_DB:-graywolf_db}
-      - STORE_MODEL_IN_DB=True
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-graywolf-prod-master}
     volumes:
       - ./docker/litellm/config.yaml:/app/config.yaml:ro
@@ -117,15 +115,13 @@ services:
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     networks:
       - control-net
-    depends_on:
-      postgres-shared:
-        condition: service_healthy
+      - edge-net
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:4000/health/liveliness\")' || exit 1"]
       interval: 4s
       timeout: 3s
       retries: 5
-      start_period: 5s
+      start_period: 10s
 
   # ----------------------------------------------------------------------------
   # 6. Production Orchestrator Service (Fastify TypeScript Control Plane)
