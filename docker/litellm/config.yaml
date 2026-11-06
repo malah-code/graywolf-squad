@@ -5,20 +5,27 @@
 
 model_list:
   # Dev-Level-1 Planner: Frontier reasoning for spec.md & plan.md authoring
+  # Top recommendation: Nemotron 3 Ultra (550B MoE, 1M context, architectural reasoning)
+  - model_name: agent-planner
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+    model_info:
+      description: "Dev-Level-1 Planner (OpenRouter Nemotron 3 Ultra 550B Free, 1M Context)"
+
   - model_name: agent-planner
     litellm_params:
       model: openrouter/nvidia/nemotron-3.5-lightning:free
       api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Dev-Level-1 Planner (OpenRouter Nemotron 3.5 Lightning Free)"
+      description: "Dev-Level-1 Planner Fallback (OpenRouter Nemotron 3.5 Lightning Free)"
 
   - model_name: agent-planner
     litellm_params:
-      model: openai/meta/llama-3.2-90b-vision-instruct
-      api_base: https://integrate.api.nvidia.com/v1
-      api_key: os.environ/NVIDIA_API_KEY
+      model: openrouter/openrouter/free
+      api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Dev-Level-1 Planner Alternative (NVIDIA Build Llama 3.2 90B)"
+      description: "Dev-Level-1 Planner Auto-Router (OpenRouter Free Meta-Router)"
 
   # Dev-Level-3 Implementer: High-throughput code generation & sandbox test iteration
   - model_name: agent-coder
@@ -38,18 +45,25 @@ model_list:
   # Dev-Level-2 Reviewer: Adversarial debate, blast-radius verification & security review
   - model_name: agent-reviewer
     litellm_params:
-      model: openrouter/nvidia/nemotron-3.5-lightning:free
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
       api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Dev-Level-2 Reviewer (OpenRouter Nemotron Free)"
+      description: "Dev-Level-2 Reviewer (OpenRouter Nemotron 3 Ultra 550B Free)"
 
-  # Neutral Arbiter: Independent decision model for Escalation Decision Memos
-  - model_name: agent-arbiter
+  - model_name: agent-reviewer
     litellm_params:
       model: openrouter/nvidia/nemotron-3.5-lightning:free
       api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Neutral Arbiter (OpenRouter Nemotron Free)"
+      description: "Dev-Level-2 Reviewer Fallback (OpenRouter Nemotron 3.5 Lightning Free)"
+
+  # Neutral Arbiter: Independent decision model for Escalation Decision Memos
+  - model_name: agent-arbiter
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+    model_info:
+      description: "Neutral Arbiter (OpenRouter Nemotron 3 Ultra 550B Free)"
 
 litellm_settings:
   drop_params: true
