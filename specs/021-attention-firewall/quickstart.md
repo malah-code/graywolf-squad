@@ -109,3 +109,4 @@ pnpm test tests/integration/attention-firewall-api.test.ts
   - `policyEffects()` detects that `TASK-101` was authorized under a rule that is now disabled.
   - Orchestrator injects an advisory message (`task.inject`) to the running container notifying it of the policy change.
   - System logs an audit record linking old and new policy version hashes.
+

@@ -138,3 +138,4 @@
   - `isDirectMention?: boolean`
 - **Rationale**:
   - Non-breaking backwards compatibility: existing addons continue to function seamlessly. Triggers without explicit handles default safely to unlisted/unaddressed `ignore`.
+

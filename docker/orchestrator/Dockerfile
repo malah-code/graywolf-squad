@@ -9,7 +9,8 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@12.14.0 --activate
 
-COPY package.json pnpm-lock.yaml* ./
+COPY pnpm-workspace.yaml* .npmrc* package.json pnpm-lock.yaml* ./
+COPY src/dashboard/package.json ./src/dashboard/
 RUN pnpm install --frozen-lockfile || pnpm install
 
 COPY tsconfig.json tsconfig.build.json ./
@@ -30,7 +31,8 @@ ENV PORT_ARP=3001
 
 RUN corepack enable && corepack prepare pnpm@12.14.0 --activate
 
-COPY package.json pnpm-lock.yaml* ./
+COPY pnpm-workspace.yaml* .npmrc* package.json pnpm-lock.yaml* ./
+COPY src/dashboard/package.json ./src/dashboard/
 RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
 
 COPY --from=builder /app/dist ./dist

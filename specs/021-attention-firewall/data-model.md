@@ -281,3 +281,4 @@ stateDiagram-v2
   evaluating --> paused: Soft pause activated (deadline shifted)
   paused --> idle: Pause duration expires
 ```
+

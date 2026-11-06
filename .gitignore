@@ -13,4 +13,7 @@ coverage/
 hermes-agent-main/
 .snapshots/
 reference-opensources/
+.graywolf/
+.env.production
+
 reference-opensources/
