@@ -26,7 +26,7 @@ export function selectTrajectorySnapshotAtStep(
   return snapshots[clamped] || null;
 }
 
-const DEFAULT_SNAPSHOTS: TrajectorySnapshot[] = [
+export const DEFAULT_SNAPSHOTS: TrajectorySnapshot[] = [
   {
     seq: 0,
     timestamp: '2026-10-25 15:00:00 UTC',
@@ -78,12 +78,22 @@ export interface TimeTravelSliderProps {
   snapshots?: TrajectorySnapshot[];
   onStepChange?: (stepIndex: number) => void;
   className?: string;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMaximized?: boolean;
+  onToggleMaximize?: () => void;
+  headerActions?: React.ReactNode;
 }
 
 export function TimeTravelSlider({
   snapshots = DEFAULT_SNAPSHOTS,
   onStepChange,
   className = '',
+  isCollapsed = false,
+  onToggleCollapse,
+  isMaximized = false,
+  onToggleMaximize,
+  headerActions,
 }: TimeTravelSliderProps): React.ReactElement {
   const [currentStep, setCurrentStep] = useState<number>(snapshots.length - 1);
   const [surfaceBOpen, setSurfaceBOpen] = useState<boolean>(false);
@@ -110,37 +120,105 @@ export function TimeTravelSlider({
     orchestrator: 'bg-sky-950 text-sky-300 border-sky-800',
   };
 
+  // Collapsed mode
+  if (isCollapsed) {
+    return (
+      <div
+        data-testid="time-travel-slider-collapsed"
+        className="flex items-center justify-between px-3 py-2 bg-slate-950 border-t border-slate-800 cursor-pointer hover:bg-slate-900 transition select-none flex-shrink-0"
+        onClick={onToggleCollapse}
+      >
+        <div className="flex items-center space-x-2.5 text-xs">
+          <span className="text-sm">⏳</span>
+          <span className="font-bold text-slate-300 uppercase tracking-wider">
+            Time-Travel Trajectory Inspector
+          </span>
+          <span className="text-[11px] font-mono text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/60">
+            Step: {currentStep + 1} / {snapshots.length}
+          </span>
+          <span className="hidden sm:inline text-slate-500 text-[11px]">({activeSnapshot.timestamp})</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            data-testid="expand-timeline-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse?.();
+            }}
+            className="flex items-center space-x-1 text-xs text-sky-400 hover:text-sky-300 font-medium px-2 py-0.5 rounded bg-sky-950/80 border border-sky-800 hover:bg-sky-900 transition"
+          >
+            <span>▲ Expand</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="time-travel-slider" className={`flex flex-col bg-slate-950 border-t border-slate-800 p-3 space-y-3 ${className}`.trim()}>
-      {/* Slider Bar Controls */}
-      <div className="flex items-center justify-between text-xs">
+    <div
+      data-testid="time-travel-slider"
+      className={`flex flex-col bg-slate-950 border-t border-slate-800 p-3 space-y-3 min-h-0 overflow-y-auto ${className}`.trim()}
+    >
+      {/* Slider Bar Controls & Header */}
+      <div className="flex items-center justify-between text-xs flex-shrink-0">
         <div className="flex items-center space-x-2">
           <span className="text-base">⏳</span>
           <span className="font-bold text-slate-300 uppercase tracking-wider">
             Time-Travel Trajectory Inspector
           </span>
+          <div className="hidden sm:flex items-center space-x-2 font-mono text-[11px] pl-2 border-l border-slate-800">
+            <span className="text-slate-400">Step:</span>
+            <span data-testid="current-step-label" className="text-sky-400 font-bold">
+              {currentStep + 1} / {snapshots.length}
+            </span>
+            <span className="text-slate-500">({activeSnapshot.timestamp})</span>
+          </div>
         </div>
-        <div className="flex items-center space-x-2 font-mono text-[11px]">
-          <span className="text-slate-400">Step:</span>
-          <span data-testid="current-step-label" className="text-sky-400 font-bold">
-            {currentStep + 1} / {snapshots.length}
-          </span>
-          <span className="text-slate-500">({activeSnapshot.timestamp})</span>
+
+        <div className="flex items-center space-x-2">
+          {headerActions}
+
+          {onToggleMaximize && (
+            <button
+              type="button"
+              data-testid="maximize-timeline-btn"
+              onClick={onToggleMaximize}
+              className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800/80 border border-slate-700 hover:bg-slate-700 transition"
+              title={isMaximized ? 'Restore normal view' : 'Maximize Trajectory Inspector'}
+            >
+              {isMaximized ? '◱ Restore' : '⛶ Maximize'}
+            </button>
+          )}
+
+          {onToggleCollapse && (
+            <button
+              type="button"
+              data-testid="collapse-timeline-btn"
+              onClick={onToggleCollapse}
+              className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800/80 border border-slate-700 hover:bg-slate-700 transition"
+              title="Collapse Trajectory Inspector"
+            >
+              ▼ Collapse
+            </button>
+          )}
         </div>
       </div>
 
-      <input
-        type="range"
-        min={0}
-        max={snapshots.length - 1}
-        value={currentStep}
-        onChange={handleSliderChange}
-        data-testid="trajectory-slider-input"
-        className="w-full accent-sky-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
-      />
+      <div className="flex-shrink-0">
+        <input
+          type="range"
+          min={0}
+          max={snapshots.length - 1}
+          value={currentStep}
+          onChange={handleSliderChange}
+          data-testid="trajectory-slider-input"
+          className="w-full accent-sky-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+        />
+      </div>
 
       {/* Surface A: Narrative Timeline Milestone */}
-      <div data-testid="surface-a-narrative" className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2">
+      <div data-testid="surface-a-narrative" className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <span className={`text-[10px] uppercase px-2 py-0.5 rounded font-bold border ${tierColors[activeSnapshot.actorTier]}`}>
             {activeSnapshot.actorTier.toUpperCase()}
@@ -173,7 +251,7 @@ export function TimeTravelSlider({
       </div>
 
       {/* Surface B: Expandable Raw Terminal Drawers */}
-      <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-900/60">
+      <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-900/60 flex-shrink-0">
         <button
           type="button"
           data-testid="toggle-surface-b-btn"

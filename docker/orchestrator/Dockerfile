@@ -36,6 +36,7 @@ COPY src/dashboard/package.json ./src/dashboard/
 RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
 
 COPY --from=builder /app/dist ./dist
+COPY config/ ./config/
 
 # Ports: 3000 (Control Plane REST), 3001 (ARP WebSocket)
 EXPOSE 3000 3001

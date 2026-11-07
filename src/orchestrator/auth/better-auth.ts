@@ -304,12 +304,62 @@ export async function createSession(input: CreateSessionInput): Promise<SessionD
   return sessionData;
 }
 
+let cachedSoloSession: SessionData | null = null;
+
+export async function resolveSoloSession(): Promise<SessionData> {
+  if (cachedSoloSession) return cachedSoloSession;
+  try {
+    const res = await pool.query<{
+      user_id: string;
+      workspace_id: string;
+      org_id: string;
+      email: string;
+      role: string;
+    }>(
+      `SELECT wm.user_id, wm.workspace_id, w.org_id, u.email, wm.role
+       FROM workspace_members wm
+       JOIN workspaces w ON wm.workspace_id = w.id
+       JOIN users u ON wm.user_id = u.id
+       ORDER BY wm.created_at ASC
+       LIMIT 1`
+    );
+    if (res.rows.length > 0) {
+      const r = res.rows[0];
+      cachedSoloSession = {
+        sessionId: 'solo-developer-session',
+        userId: r.user_id,
+        email: r.email,
+        currentWorkspaceId: r.workspace_id,
+        currentOrganizationId: r.org_id,
+        role: (r.role as WorkspaceRole) || 'owner',
+        expiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+      };
+      return cachedSoloSession;
+    }
+  } catch (err) {
+    logger.debug({ err }, 'Failed to query solo workspace from DB, using fallback');
+  }
+
+  return {
+    sessionId: 'solo-developer-session',
+    userId: '33a30cd9-1bbc-4da6-8f9b-325a1a371ef1',
+    email: 'admin@graywolf.local',
+    currentWorkspaceId: 'e285707d-f08f-407c-a194-d0413703ba5d',
+    currentOrganizationId: '75822eb2-c76f-4a03-9e98-ad7cd75a4f4e',
+    role: 'owner',
+    expiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+  };
+}
+
 /**
  * Validates a session token from Valkey cache (<1ms) with fail-closed revocation checks
  * and graceful fallback to PostgreSQL if not in cache.
  */
 export async function verifySession(sessionId?: string): Promise<SessionData> {
   if (!sessionId || sessionId.trim().length === 0) {
+    if (process.env.DEPLOYMENT_TOPOLOGY === 'solo') {
+      return await resolveSoloSession();
+    }
     throw new GraywolfAppError('AUTH_SESSION_MISSING', 'Session token is missing or empty');
   }
 

@@ -4,6 +4,7 @@ import pino from 'pino';
 import { requirePermission, enforcePermission } from '../auth/rbac';
 import { executeAuthorizedToolCall } from '../aci/validate';
 import { LiteLLMClient } from '../gateway/litellm-client';
+import { withTenantContext } from '../db';
 
 const logger = pino({ name: 'routes:chat' });
 
@@ -172,26 +173,100 @@ export async function chatRoutes(fastify: FastifyInstance, options?: { litellmCl
         ])}\n`
       );
 
-      // Inject @current_file into prompt context
-      const messagesWithContext = [...body.messages];
-      if (body.currentFile) {
-        messagesWithContext.unshift({
-          role: 'system',
-          content: `@current_file: ${body.currentFile}`,
-        });
+      // Fetch active project's current task list from DB to provide full board context to LLM
+      let projectContext = `Active Workspace ID: ${user.currentWorkspaceId}\nActive Project ID: ${body.projectId}`;
+      try {
+        const tasks = await withTenantContext(
+          { workspaceId: user.currentWorkspaceId, orgId: user.currentOrganizationId },
+          async (client) => {
+            const res = await client.query<{
+              id: string;
+              title: string;
+              status: string;
+              priority: string;
+              assigned_tier: string | null;
+            }>(
+              `SELECT id, title, status, priority, assigned_tier
+               FROM tasks
+               WHERE project_id = $1 AND workspace_id = $2
+               ORDER BY created_at ASC`,
+              [body.projectId, user.currentWorkspaceId]
+            );
+            return res.rows;
+          }
+        );
+
+        if (tasks && tasks.length > 0) {
+          projectContext += `\nCurrent Tasks on Board (${tasks.length}):\n` +
+            tasks
+              .map(
+                (t) =>
+                  `- [${t.id}] ${t.title} (Status: ${t.status}, Priority: ${t.priority}${
+                    t.assigned_tier ? `, Assigned: ${t.assigned_tier}` : ''
+                  })`
+              )
+              .join('\n');
+        } else {
+          projectContext += `\nCurrent Tasks on Board: None (The task board is currently empty for this project).`;
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Could not fetch tasks for cockpit context');
       }
+
+      // Inject system prompt with board awareness and optional active file
+      const messagesWithContext = [...body.messages];
+      messagesWithContext.unshift({
+        role: 'system',
+        content:
+          `You are Graywolf Squad Technical Lead and Architect assisting the developer in the Cockpit.\n${projectContext}` +
+          (body.currentFile ? `\n@current_file: ${body.currentFile}` : '') +
+          `\n\nARCHITECTURAL PLANNING PROTOCOL:
+When the user asks to build, design, or plan a project, application, or feature:
+1. Provide a concise architectural investigation & technical strategy summary.
+2. ALWAYS include a structured **Recommended Task Breakdown** markdown table so the Cockpit can instantiate atomic tasks and DAG dependency edges on the Kanban board when the user clicks "Create Task on Board".
+Use this exact 4-column table format:
+| ID | Task | Dependencies | Verification Criteria |
+| :--- | :--- | :--- | :--- |
+| **T-01** | **Short Task Title** — Detailed implementation scope and requirements | None | Concrete verification and test criteria |
+| **T-02** | **Next Task Title** — Detailed implementation scope and requirements | T-01 | Concrete verification and test criteria |
+Keep tasks atomic (3 to 7 tasks depending on scope), ordered by dependency, and never put HTML <br> tags inside table cells.`,
+      });
 
       // Try LiteLLM completion with fallback
       try {
+        // Stream immediate progress acknowledgement frame
+        reply.raw.write(
+          `2:${JSON.stringify([
+            {
+              type: 'progress',
+              status: 'thinking',
+              message: 'Squad Planner is formulating architecture and execution strategy...',
+            },
+          ])}\n`
+        );
+
         const completion = await litellmClient.complete({
           alias: 'agent-planner',
           messages: messagesWithContext.map((m) => ({ role: m.role, content: m.content })),
           workspaceId: user.currentWorkspaceId,
           persona: 'planner',
+          maxTokens: 8192,
         });
+
+        if (completion.reasoningContent) {
+          reply.raw.write(
+            `2:${JSON.stringify([
+              {
+                type: 'thought',
+                thought: completion.reasoningContent,
+              },
+            ])}\n`
+          );
+        }
+
         reply.raw.write(`0:${JSON.stringify(completion.content + '\n')}\n`);
       } catch (err) {
-        logger.debug({ err }, 'LiteLLM completion fallback triggered');
+        logger.error({ err }, 'LiteLLM completion error in chat route');
         const fallbackText = `Acknowledged. Cockpit turn processed for workspace ${user.currentWorkspaceId}.${
           body.currentFile ? ` Active file: ${body.currentFile}` : ''
         }\n`;

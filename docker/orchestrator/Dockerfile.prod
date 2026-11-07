@@ -56,6 +56,9 @@ COPY --from=builder /app/dist ./dist
 # Copy database schema migrations for node-pg-migrate
 COPY migrations/ ./migrations/
 
+# Copy configuration (RBAC models, seccomp filters)
+COPY config/ ./config/
+
 # Copy runtime relay harness scripts for in-container task execution
 COPY src/relay/ ./src/relay/
 

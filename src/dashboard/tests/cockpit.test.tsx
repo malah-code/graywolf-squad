@@ -45,6 +45,7 @@ import {
   selectTrajectorySnapshotAtStep,
   TrajectorySnapshot,
 } from '../src/components/board/TimeTravelSlider';
+import { BoardLayout } from '../src/components/board/BoardLayout';
 
 describe('Cockpit & Dashboard Components Unit & Integration Tests (Phase 12)', () => {
   beforeEach(() => {
@@ -435,6 +436,112 @@ describe('Cockpit & Dashboard Components Unit & Integration Tests (Phase 12)', (
       fireEvent.click(toggleBtn);
 
       expect(screen.getByTestId('surface-b-terminal-drawer')).toBeInTheDocument();
+    });
+  });
+
+  describe('8. BoardLayout, Resizable Splitters & Collapsible Panels', () => {
+    it('BoardLayout renders all panels and splitters by default', () => {
+      render(<BoardLayout persona="developer" userRole="developer" />);
+
+      expect(screen.getByTestId('board-container')).toBeInTheDocument();
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+      expect(screen.getByTestId('dag-graph')).toBeInTheDocument();
+      expect(screen.getByTestId('time-travel-slider')).toBeInTheDocument();
+      expect(screen.getByTestId('board-splitter-kanban-dag')).toBeInTheDocument();
+      expect(screen.getByTestId('board-splitter-dag-timeline')).toBeInTheDocument();
+    });
+
+    it('collapses and expands Kanban board', () => {
+      render(<BoardLayout persona="developer" userRole="developer" />);
+
+      const collapseKanbanBtn = screen.getByTestId('collapse-kanban-btn');
+      fireEvent.click(collapseKanbanBtn);
+
+      expect(screen.queryByTestId('kanban-board')).not.toBeInTheDocument();
+      expect(screen.getByTestId('kanban-board-collapsed')).toBeInTheDocument();
+
+      const expandKanbanBtn = screen.getByTestId('expand-kanban-btn');
+      fireEvent.click(expandKanbanBtn);
+
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+      expect(screen.queryByTestId('kanban-board-collapsed')).not.toBeInTheDocument();
+    });
+
+    it('collapses and expands DAG Visualizer', () => {
+      render(<BoardLayout persona="developer" userRole="developer" />);
+
+      const collapseDagBtn = screen.getByTestId('collapse-dag-btn');
+      fireEvent.click(collapseDagBtn);
+
+      expect(screen.queryByTestId('dag-graph')).not.toBeInTheDocument();
+      expect(screen.getByTestId('dag-graph-collapsed')).toBeInTheDocument();
+
+      const expandDagBtn = screen.getByTestId('expand-dag-btn');
+      fireEvent.click(expandDagBtn);
+
+      expect(screen.getByTestId('dag-graph')).toBeInTheDocument();
+      expect(screen.queryByTestId('dag-graph-collapsed')).not.toBeInTheDocument();
+    });
+
+    it('collapses and expands TimeTravelSlider', () => {
+      render(<BoardLayout persona="developer" userRole="developer" />);
+
+      const collapseTimelineBtn = screen.getByTestId('collapse-timeline-btn');
+      fireEvent.click(collapseTimelineBtn);
+
+      expect(screen.queryByTestId('time-travel-slider')).not.toBeInTheDocument();
+      expect(screen.getByTestId('time-travel-slider-collapsed')).toBeInTheDocument();
+
+      const expandTimelineBtn = screen.getByTestId('expand-timeline-btn');
+      fireEvent.click(expandTimelineBtn);
+
+      expect(screen.getByTestId('time-travel-slider')).toBeInTheDocument();
+      expect(screen.queryByTestId('time-travel-slider-collapsed')).not.toBeInTheDocument();
+    });
+
+    it('maximizes and restores panel via preset buttons', () => {
+      render(<BoardLayout persona="developer" userRole="developer" />);
+
+      // Kanban Focus Preset
+      const kanbanPresetBtn = screen.getByTestId('preset-kanban-btn');
+      fireEvent.click(kanbanPresetBtn);
+
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+      expect(screen.getByTestId('dag-graph-collapsed')).toBeInTheDocument();
+      expect(screen.getByTestId('time-travel-slider-collapsed')).toBeInTheDocument();
+
+      // DAG Focus Preset
+      const dagPresetBtn = screen.getByTestId('preset-dag-btn');
+      fireEvent.click(dagPresetBtn);
+
+      expect(screen.getByTestId('kanban-board-collapsed')).toBeInTheDocument();
+      expect(screen.getByTestId('dag-graph')).toBeInTheDocument();
+      expect(screen.getByTestId('time-travel-slider-collapsed')).toBeInTheDocument();
+
+      // Split View Preset
+      const splitPresetBtn = screen.getByTestId('preset-all-btn');
+      fireEvent.click(splitPresetBtn);
+
+      expect(screen.getByTestId('kanban-board')).toBeInTheDocument();
+      expect(screen.getByTestId('dag-graph')).toBeInTheDocument();
+      expect(screen.getByTestId('time-travel-slider')).toBeInTheDocument();
+    });
+
+    it('opens task details modal when a task card is clicked', () => {
+      render(<BoardLayout persona="developer" userRole="developer" />);
+
+      const taskCard = screen.getByTestId('kanban-task-TASK-101');
+      fireEvent.click(taskCard);
+
+      const modal = screen.getByTestId('task-detail-modal');
+      expect(modal).toBeInTheDocument();
+      expect(modal.textContent).toContain('Fastify Vercel AI SDK route');
+
+      // Close modal
+      const closeBtn = screen.getByText('Close Details');
+      fireEvent.click(closeBtn);
+
+      expect(screen.queryByTestId('task-detail-modal')).not.toBeInTheDocument();
     });
   });
 });

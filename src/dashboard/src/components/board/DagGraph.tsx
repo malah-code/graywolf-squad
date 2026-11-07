@@ -92,7 +92,7 @@ export function connectDagDependencyEdge(
   };
 }
 
-const DEFAULT_DAG_NODES: DagTaskNode[] = [
+export const DEFAULT_DAG_NODES: DagTaskNode[] = [
   {
     id: 'TASK-101',
     title: 'Fastify Streaming Route',
@@ -123,12 +123,22 @@ export interface DagGraphProps {
   initialNodes?: DagTaskNode[];
   onConnectEdge?: (source: string, target: string) => void;
   className?: string;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  isMaximized?: boolean;
+  onToggleMaximize?: () => void;
+  headerActions?: React.ReactNode;
 }
 
 export function DagGraph({
   initialNodes = DEFAULT_DAG_NODES,
   onConnectEdge,
   className = '',
+  isCollapsed = false,
+  onToggleCollapse,
+  isMaximized = false,
+  onToggleMaximize,
+  headerActions,
 }: DagGraphProps): React.ReactElement {
   const [dagNodes, setDagNodes] = useState<DagTaskNode[]>(initialNodes);
   const [cycleError, setCycleError] = useState<string | null>(null);
@@ -139,10 +149,10 @@ export function DagGraph({
     position: n.position || { x: (i % 3) * 220 + 40, y: Math.floor(i / 3) * 120 + 40 },
     data: {
       label: (
-        <div className="p-2 rounded bg-slate-900 border border-slate-700 text-xs">
+        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs shadow-md">
           <div className="font-mono text-sky-400 font-bold">{n.id}</div>
-          <div className="text-slate-200 text-[11px] font-medium">{n.title || n.id}</div>
-          <div className="text-[10px] text-slate-400 font-mono mt-1">Status: {n.status}</div>
+          <div className="text-slate-200 text-[11px] font-medium mt-0.5">{n.title || n.id}</div>
+          <div className="text-[10px] text-slate-400 font-mono mt-1 pt-1 border-t border-slate-800">Status: {n.status}</div>
         </div>
       ),
     },
@@ -165,6 +175,43 @@ export function DagGraph({
 
   const [nodes, setNodes] = useState<Node[]>(flowNodes);
   const [edges, setEdges] = useState<Edge[]>(flowEdges);
+
+  React.useEffect(() => {
+    setDagNodes(initialNodes);
+  }, [initialNodes]);
+
+  React.useEffect(() => {
+    const updatedFlowNodes: Node[] = dagNodes.map((n, i) => ({
+      id: n.id,
+      position: n.position || { x: (i % 3) * 220 + 40, y: Math.floor(i / 3) * 120 + 40 },
+      data: {
+        label: (
+          <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs shadow-md">
+            <div className="font-mono text-sky-400 font-bold">{n.id}</div>
+            <div className="text-slate-200 text-[11px] font-medium mt-0.5">{n.title || n.id}</div>
+            <div className="text-[10px] text-slate-400 font-mono mt-1 pt-1 border-t border-slate-800">Status: {n.status}</div>
+          </div>
+        ),
+      },
+      style: { background: 'transparent', border: 'none', padding: 0 },
+    }));
+
+    const updatedFlowEdges: Edge[] = [];
+    dagNodes.forEach((node) => {
+      node.blockedBy.forEach((blockerId) => {
+        updatedFlowEdges.push({
+          id: `e-${blockerId}-${node.id}`,
+          source: blockerId,
+          target: node.id,
+          animated: true,
+          style: { stroke: '#38bdf8', strokeWidth: 2 },
+        });
+      });
+    });
+
+    setNodes(updatedFlowNodes);
+    setEdges(updatedFlowEdges);
+  }, [dagNodes]);
 
   const onNodesChange = (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds));
   const onEdgesChange = (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds));
@@ -198,26 +245,91 @@ export function DagGraph({
     }
   };
 
+  // Collapsed header bar mode
+  if (isCollapsed) {
+    return (
+      <div
+        data-testid="dag-graph-collapsed"
+        className="flex items-center justify-between px-3 py-2 bg-slate-900 border-t border-slate-800 cursor-pointer hover:bg-slate-850 transition select-none flex-shrink-0"
+        onClick={onToggleCollapse}
+      >
+        <div className="flex items-center space-x-2">
+          <span>🕸️</span>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            React Flow DAG Visualizer (Branch Stacking & BlockedBy)
+          </h3>
+          <span className="text-[10px] text-slate-400 font-mono">[{dagNodes.length} nodes]</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            data-testid="expand-dag-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse?.();
+            }}
+            className="flex items-center space-x-1 text-xs text-sky-400 hover:text-sky-300 font-medium px-2 py-0.5 rounded bg-sky-950/80 border border-sky-800 hover:bg-sky-900 transition"
+          >
+            <span>▲ Expand</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="dag-graph" className={`flex flex-col h-full bg-slate-950 text-slate-200 ${className}`.trim()}>
-      <div className="p-2.5 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
+    <div
+      data-testid="dag-graph"
+      className={`flex flex-col h-full min-h-0 bg-slate-950 text-slate-200 overflow-hidden ${className}`.trim()}
+    >
+      <div className="px-3 py-2 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center space-x-2">
           <span className="text-sm">🕸️</span>
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
             React Flow DAG Visualizer (Branch Stacking & BlockedBy)
           </h3>
+          <span className="hidden md:inline-block text-[10px] text-slate-400 font-mono pl-2">
+            (Drag connectors between task nodes)
+          </span>
         </div>
-        <span className="text-[10px] text-slate-400 font-mono">Drag connectors between task nodes</span>
+
+        <div className="flex items-center space-x-2">
+          {headerActions}
+
+          {onToggleMaximize && (
+            <button
+              type="button"
+              data-testid="maximize-dag-btn"
+              onClick={onToggleMaximize}
+              className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800/80 border border-slate-700 hover:bg-slate-700 transition"
+              title={isMaximized ? 'Restore normal view' : 'Maximize DAG Visualizer'}
+            >
+              {isMaximized ? '◱ Restore' : '⛶ Maximize'}
+            </button>
+          )}
+
+          {onToggleCollapse && (
+            <button
+              type="button"
+              data-testid="collapse-dag-btn"
+              onClick={onToggleCollapse}
+              className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded bg-slate-800/80 border border-slate-700 hover:bg-slate-700 transition"
+              title="Collapse DAG Visualizer"
+            >
+              ▼ Collapse
+            </button>
+          )}
+        </div>
       </div>
 
       {cycleError && (
-        <div data-testid="dag-cycle-error" className="bg-rose-950 border-b border-rose-800 px-3 py-1.5 text-xs text-rose-300 flex justify-between">
+        <div data-testid="dag-cycle-error" className="bg-rose-950 border-b border-rose-800 px-3 py-1.5 text-xs text-rose-300 flex justify-between flex-shrink-0">
           <span>⚠️ {cycleError}</span>
           <button type="button" onClick={() => setCycleError(null)} className="text-rose-400 hover:text-white">✕</button>
         </div>
       )}
 
-      <div className="flex-1 w-full h-full min-h-[220px]">
+      <div className="flex-1 w-full h-full min-h-0 relative">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -227,7 +339,7 @@ export function DagGraph({
           fitView
         >
           <Background color="#1e293b" gap={16} />
-          <Controls className="bg-slate-900 border border-slate-800 text-white fill-white" />
+          <Controls className="bg-slate-900 border border-slate-800 text-slate-300" />
         </ReactFlow>
       </div>
     </div>

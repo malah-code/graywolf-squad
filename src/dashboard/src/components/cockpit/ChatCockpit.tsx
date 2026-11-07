@@ -8,6 +8,7 @@ export interface ChatMessageItem {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
+  thoughtProcess?: string;
   toolCall?: {
     toolName: string;
     args: Record<string, unknown>;
@@ -39,6 +40,7 @@ export interface ChatCockpitProps {
     skipGrill?: boolean;
   }) => Promise<void>;
   onQueueTask?: (briefMarkdown: string) => Promise<void>;
+  onViewBoard?: () => void;
 }
 
 export function ChatCockpit({
@@ -51,6 +53,7 @@ export function ChatCockpit({
   onCancelTask,
   onSendMessage,
   onQueueTask,
+  onViewBoard,
 }: ChatCockpitProps): React.ReactElement {
   const [cockpitMode, setCockpitMode] = useState<'STANDARD' | 'GRILL'>(initialCockpitMode);
   const [accessMode, setAccessMode] = useState<AccessModePillValue>(initialAccessMode);
@@ -58,6 +61,12 @@ export function ChatCockpit({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancellationResult, setCancellationResult] = useState<string | null>(null);
+  const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
+  const [streamingThought, setStreamingThought] = useState<string>('');
+  const [streamElapsedSec, setStreamElapsedSec] = useState<number>(0);
+  const chatBottomRef = React.useRef<HTMLDivElement>(null);
+
+  const storageKey = `graywolf_chat_history_${projectId || 'default'}`;
 
   const [spendState] = useState<SpendTickerState>({
     taskId: activeTaskId,
@@ -68,14 +77,75 @@ export function ChatCockpit({
     connectionStatus: 'connected',
   });
 
-  const [messages, setMessages] = useState<ChatMessageItem[]>([
-    {
-      id: 'msg-init',
-      role: 'assistant',
-      content:
-        'Graywolf Squad Cockpit active. Ready to plan, execute, or inspect tasks across your container workspace.',
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessageItem[]>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      }
+    } catch {}
+    return [
+      {
+        id: 'msg-init',
+        role: 'assistant',
+        content:
+          'Graywolf Squad Cockpit active. Ready to plan, execute, or inspect tasks across your container workspace.',
+      },
+    ];
+  });
+
+  // Persist messages whenever they change
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && messages.length > 0) {
+        localStorage.setItem(storageKey, JSON.stringify(messages));
+      }
+    } catch {}
+  }, [messages, storageKey]);
+
+  // When projectId changes, reload that project's chat history
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed);
+            return;
+          }
+        }
+      }
+    } catch {}
+    setMessages([
+      {
+        id: 'msg-init',
+        role: 'assistant',
+        content:
+          'Graywolf Squad Cockpit active. Ready to plan, execute, or inspect tasks across your container workspace.',
+      },
+    ]);
+  }, [projectId, storageKey]);
+
+  React.useEffect(() => {
+    if (!isStreaming) {
+      setStreamElapsedSec(0);
+      setStreamingStatus(null);
+      setStreamingThought('');
+      return;
+    }
+    const timer = setInterval(() => {
+      setStreamElapsedSec((s) => +(s + 0.5).toFixed(1));
+    }, 500);
+    return () => clearInterval(timer);
+  }, [isStreaming]);
+
+  React.useEffect(() => {
+    chatBottomRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+  }, [messages, isStreaming, streamingThought]);
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -103,39 +173,161 @@ export function ChatCockpit({
           currentFile,
         });
       } else {
-        // Fallback simulated response if no external sender provided
-        const isSkip = userMsg.content.includes('--skip-grill');
-        if (cockpitMode === 'GRILL') {
-          if (isSkip) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `msg-${Date.now()}-ai`,
-                role: 'assistant',
-                content: 'Socratic review bypassed. Brief synthesized.',
-                briefPreview: `# Task Brief\n\n**Goal**: ${userMsg.content}\n**Status**: Ready to queue`,
-                requiresConfirmation: true,
-              },
-            ]);
+        // Direct stream call to backend /api/v1/chat/stream
+        try {
+          const res = await fetch('/api/v1/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: projectId || '00000000-0000-4000-8000-000000000001',
+              taskId: activeTaskId,
+              messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+              cockpitMode,
+              accessModeOverride: accessMode,
+              currentFile,
+            }),
+          });
+
+          if (!res.ok || !res.body) {
+            throw new Error(`Chat stream returned ${res.status}`);
+          }
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let fullAssistantContent = '';
+          let capturedThought = '';
+          const aiMsgId = `msg-${Date.now()}-ai`;
+
+          const updateAssistantMessage = (content: string, briefPreview?: string, requiresConfirmation?: boolean, thought?: string) => {
+            let finalContent = content;
+            let finalThought = thought || capturedThought;
+            const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/i);
+            if (thinkMatch) {
+              finalThought = thinkMatch[1].trim();
+              finalContent = content.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+            }
+
+            setMessages((prev) => {
+              const existingIdx = prev.findIndex((m) => m.id === aiMsgId);
+              if (existingIdx !== -1) {
+                const updated = [...prev];
+                updated[existingIdx] = {
+                  ...updated[existingIdx],
+                  content: finalContent || updated[existingIdx].content,
+                  thoughtProcess: finalThought || updated[existingIdx].thoughtProcess,
+                  ...(briefPreview !== undefined ? { briefPreview, requiresConfirmation } : {}),
+                };
+                return updated;
+              }
+              return [
+                ...prev,
+                {
+                  id: aiMsgId,
+                  role: 'assistant',
+                  content: finalContent,
+                  thoughtProcess: finalThought,
+                  ...(briefPreview !== undefined ? { briefPreview, requiresConfirmation } : {}),
+                },
+              ];
+            });
+          };
+
+          const parseFrame = (line: string) => {
+            const trimmed = line.trim();
+            if (!trimmed) return;
+            const colonIdx = trimmed.indexOf(':');
+            if (colonIdx === -1) {
+              fullAssistantContent += (fullAssistantContent ? '\n' : '') + trimmed;
+              updateAssistantMessage(fullAssistantContent);
+              return;
+            }
+            const code = trimmed.slice(0, colonIdx);
+            const payloadStr = trimmed.slice(colonIdx + 1);
+
+            try {
+              const payload = JSON.parse(payloadStr);
+              if (code === '0') {
+                fullAssistantContent += payload;
+                updateAssistantMessage(fullAssistantContent);
+              } else if (code === '2') {
+                if (Array.isArray(payload)) {
+                  for (const item of payload) {
+                    if (item.type === 'progress') {
+                      setStreamingStatus(item.message || 'Thinking...');
+                    } else if (item.type === 'thought') {
+                      capturedThought = item.thought;
+                      setStreamingThought(item.thought);
+                      updateAssistantMessage(fullAssistantContent, undefined, undefined, capturedThought);
+                    } else if (item.briefPreviewMarkdown) {
+                      updateAssistantMessage(fullAssistantContent, item.briefPreviewMarkdown, item.requiresConfirmation);
+                    }
+                  }
+                }
+              }
+            } catch {
+              if (code === '0' || !code.match(/^[0-9a-z]$/)) {
+                fullAssistantContent += payloadStr;
+                updateAssistantMessage(fullAssistantContent);
+              }
+            }
+          };
+
+          let buffer = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              parseFrame(line);
+            }
+          }
+
+          if (buffer.trim()) {
+            parseFrame(buffer);
+          }
+
+          if (!fullAssistantContent.trim()) {
+            fullAssistantContent = 'Acknowledged. Ready to plan and execute tasks for this project.';
+            updateAssistantMessage(fullAssistantContent);
+          }
+        } catch {
+          // Fallback simulated response if no external backend available or in isolated test runner
+          const isSkip = userMsg.content.includes('--skip-grill');
+          if (cockpitMode === 'GRILL') {
+            if (isSkip) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `msg-${Date.now()}-ai`,
+                  role: 'assistant',
+                  content: 'Socratic review bypassed. Brief synthesized.',
+                  briefPreview: `# Task Brief\n\n**Goal**: ${userMsg.content}\n**Status**: Ready to queue`,
+                  requiresConfirmation: true,
+                },
+              ]);
+            } else {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `msg-${Date.now()}-ai`,
+                  role: 'assistant',
+                  content: 'Question 1/5: What is the blast-radius scope for this change?',
+                },
+              ]);
+            }
           } else {
             setMessages((prev) => [
               ...prev,
               {
                 id: `msg-${Date.now()}-ai`,
                 role: 'assistant',
-                content: 'Question 1/5: What is the blast-radius scope for this change?',
+                content: `Turn processed in ${accessMode} mode.${currentFile ? ` Active file: ${currentFile}` : ''}`,
               },
             ]);
           }
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `msg-${Date.now()}-ai`,
-              role: 'assistant',
-              content: `Turn processed in ${accessMode} mode.${currentFile ? ` Active file: ${currentFile}` : ''}`,
-            },
-          ]);
         }
       }
     } finally {
@@ -179,7 +371,7 @@ export function ChatCockpit({
       {
         id: `msg-${Date.now()}-queued`,
         role: 'system',
-        content: '✅ Task queued successfully from verified brief preview.',
+        content: '✅ Task created and added to your Kanban Board & DAG! Ready to dispatch squad.',
       },
     ]);
   };
@@ -205,6 +397,32 @@ export function ChatCockpit({
 
           {/* Access Mode Pill */}
           <AccessModePill value={accessMode} role={userRole} onChange={setAccessMode} />
+
+          {/* Clear Chat Button */}
+          <button
+            type="button"
+            data-testid="clear-chat-btn"
+            onClick={() => {
+              const initial: ChatMessageItem[] = [
+                {
+                  id: 'msg-init',
+                  role: 'assistant',
+                  content:
+                    'Graywolf Squad Cockpit active. Ready to plan, execute, or inspect tasks across your container workspace.',
+                },
+              ];
+              setMessages(initial);
+              try {
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem(storageKey);
+                }
+              } catch {}
+            }}
+            className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 hover:border-slate-700 transition"
+            title="Clear chat history for this project"
+          >
+            Clear
+          </button>
         </div>
 
         <div className="flex items-center space-x-2">
@@ -252,6 +470,22 @@ export function ChatCockpit({
                   : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-bl-none'
               }`}
             >
+              {/* Expandable Architectural Thought / Reasoning Process */}
+              {m.thoughtProcess && (
+                <details className="mb-3 rounded-lg bg-slate-950/80 p-2.5 border border-sky-950/80 text-xs group" open>
+                  <summary className="cursor-pointer font-mono text-[11px] font-semibold text-sky-400 hover:text-sky-300 select-none flex items-center justify-between">
+                    <span className="flex items-center space-x-1.5">
+                      <span>🧠</span>
+                      <span>Squad Reasoning & Analysis</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500 group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <div className="mt-2 text-[11px] whitespace-pre-wrap text-slate-300 font-mono border-t border-slate-800/60 pt-2 leading-relaxed max-h-60 overflow-y-auto">
+                    {m.thoughtProcess}
+                  </div>
+                </details>
+              )}
+
               <BidiProse dir="auto">
                 <p className="whitespace-pre-wrap">{m.content}</p>
               </BidiProse>
@@ -306,9 +540,61 @@ export function ChatCockpit({
                   )}
                 </div>
               )}
+              {/* Vibe Coder Action: Create Task on Board from Assistant Plan */}
+              {m.role === 'assistant' && m.id !== 'msg-init' && !m.briefPreview && (
+                <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-800">
+                  <span className="text-[11px] text-slate-400">Ready to build this?</span>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmQueueTask(m.content)}
+                    className="flex items-center space-x-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-500 transition"
+                  >
+                    <span>⚡</span>
+                    <span>Create Task on Board</span>
+                  </button>
+                </div>
+              )}
+
+              {/* View Board & DAG Switch Shortcut */}
+              {m.role === 'system' && onViewBoard && (
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onViewBoard}
+                    className="text-xs font-bold text-sky-400 hover:text-sky-300 underline flex items-center space-x-1"
+                  >
+                    <span>👉 Switch to Board & DAG to Dispatch Squad</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}
+
+        {/* Live Thinking & Progress Indicator */}
+        {isStreaming && (
+          <div data-testid="assistant-thinking-indicator" className="flex flex-col items-start space-y-2">
+            <div className="flex items-center space-x-2.5 rounded-xl bg-slate-900/90 border border-slate-800 px-4 py-2.5 text-xs text-sky-400 shadow-md">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+              </span>
+              <span className="font-semibold">{streamingStatus || 'Squad is analyzing and formulating plan...'}</span>
+              <span className="text-slate-400 font-mono text-[11px]">({streamElapsedSec.toFixed(1)}s)</span>
+            </div>
+
+            {streamingThought && (
+              <div className="max-w-[85%] rounded-lg bg-slate-950/90 p-3 border border-sky-900/40 text-xs font-mono text-slate-300 shadow">
+                <div className="flex items-center space-x-1.5 text-sky-400 mb-1 text-[11px] font-bold">
+                  <span>🧠</span>
+                  <span>Active Reasoning Stream:</span>
+                </div>
+                <p className="whitespace-pre-wrap text-[11px] text-slate-400 max-h-40 overflow-y-auto">{streamingThought}</p>
+              </div>
+            )}
+          </div>
+        )}
+        <div ref={chatBottomRef} />
       </div>
 
       {/* Input Area */}

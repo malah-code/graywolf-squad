@@ -5,65 +5,122 @@
 
 model_list:
   # Dev-Level-1 Planner: Frontier reasoning for spec.md & plan.md authoring
-  # Top recommendation: Nemotron 3 Ultra (550B MoE, 1M context, architectural reasoning)
+  # 1. Gemini 3.1 Flash Lite (Free tier, sub-second responses, 1M context)
+  - model_name: agent-planner
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Dev-Level-1 Planner Primary (Google Gemini 3.1 Flash Lite Free)"
+
+  # 2. Gemini Flash Lite Latest (Free tier, Google's dynamic latest lite endpoint)
+  - model_name: agent-planner
+    litellm_params:
+      model: gemini/gemini-flash-lite-latest
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Dev-Level-1 Planner Latest (Google Gemini Flash Lite Latest Free)"
+
+  # 3. Gemini 3.5 Flash (High speed frontier flash model)
+  - model_name: agent-planner
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Dev-Level-1 Planner Fast (Google Gemini 3.5 Flash Free)"
+
+  # 4. OpenRouter Nemotron 3 Ultra 550B Free (1M Context, deep architectural reasoning)
   - model_name: agent-planner
     litellm_params:
       model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
       api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Dev-Level-1 Planner (OpenRouter Nemotron 3 Ultra 550B Free, 1M Context)"
+      description: "Dev-Level-1 Planner Reasoning Fallback (OpenRouter Nemotron 3 Ultra 550B Free)"
 
+  # 5. Gemini 3.8 Flash (Latest frontier flash model)
   - model_name: agent-planner
     litellm_params:
-      model: openrouter/nvidia/nemotron-3.5-lightning:free
-      api_key: os.environ/OPENROUTER_API_KEY
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GEMINI_API_KEY
     model_info:
-      description: "Dev-Level-1 Planner Fallback (OpenRouter Nemotron 3.5 Lightning Free)"
-
-  - model_name: agent-planner
-    litellm_params:
-      model: openrouter/openrouter/free
-      api_key: os.environ/OPENROUTER_API_KEY
-    model_info:
-      description: "Dev-Level-1 Planner Auto-Router (OpenRouter Free Meta-Router)"
+      description: "Dev-Level-1 Planner Frontier (Google Gemini 3.8 Flash)"
 
   # Dev-Level-3 Implementer: High-throughput code generation & sandbox test iteration
   - model_name: agent-coder
     litellm_params:
-      model: gemini/gemini-flash-latest
+      model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY
     model_info:
-      description: "Dev-Level-3 Implementer (Google Gemini Flash Latest)"
+      description: "Dev-Level-3 Implementer Primary (Google Gemini 3.1 Flash Lite Free)"
+
+  - model_name: agent-coder
+    litellm_params:
+      model: gemini/gemini-flash-lite-latest
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Dev-Level-3 Implementer Latest (Google Gemini Flash Lite Latest Free)"
+
+  - model_name: agent-coder
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Dev-Level-3 Implementer Fast (Google Gemini 3.5 Flash Free)"
+
+  - model_name: agent-coder
+    litellm_params:
+      model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+    model_info:
+      description: "Dev-Level-3 Implementer Fallback (OpenRouter Nemotron 3 Ultra 550B Free)"
 
   - model_name: agent-coder
     litellm_params:
       model: openrouter/cohere/north-mini-code:free
       api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Dev-Level-3 Implementer Fallback (OpenRouter Mini Code Free)"
+      description: "Dev-Level-3 Implementer Code Fallback (OpenRouter Mini Code Free)"
 
   # Dev-Level-2 Reviewer: Adversarial debate, blast-radius verification & security review
+  - model_name: agent-reviewer
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Dev-Level-2 Reviewer Primary (Google Gemini 3.1 Flash Lite Free)"
+
+  - model_name: agent-reviewer
+    litellm_params:
+      model: gemini/gemini-3.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Dev-Level-2 Reviewer Fast (Google Gemini 3.5 Flash Free)"
+
   - model_name: agent-reviewer
     litellm_params:
       model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
       api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Dev-Level-2 Reviewer (OpenRouter Nemotron 3 Ultra 550B Free)"
-
-  - model_name: agent-reviewer
-    litellm_params:
-      model: openrouter/nvidia/nemotron-3.5-lightning:free
-      api_key: os.environ/OPENROUTER_API_KEY
-    model_info:
-      description: "Dev-Level-2 Reviewer Fallback (OpenRouter Nemotron 3.5 Lightning Free)"
+      description: "Dev-Level-2 Reviewer Fallback (OpenRouter Nemotron 3 Ultra 550B Free)"
 
   # Neutral Arbiter: Independent decision model for Escalation Decision Memos
+  - model_name: agent-arbiter
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      description: "Neutral Arbiter (Google Gemini 3.1 Flash Lite Free)"
+
   - model_name: agent-arbiter
     litellm_params:
       model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
       api_key: os.environ/OPENROUTER_API_KEY
     model_info:
-      description: "Neutral Arbiter (OpenRouter Nemotron 3 Ultra 550B Free)"
+      description: "Neutral Arbiter Fallback (OpenRouter Nemotron 3 Ultra 550B Free)"
+
+router_settings:
+  num_retries: 2
+  timeout: 60
 
 litellm_settings:
   drop_params: true

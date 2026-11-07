@@ -7,7 +7,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // GET /api/v1/auth/session
   fastify.get('/session', async (request: FastifyRequest, reply: FastifyReply) => {
     const sessionId = extractSessionIdFromRequest(request);
-    if (!sessionId) {
+    if (!sessionId && process.env.DEPLOYMENT_TOPOLOGY !== 'solo') {
       throw new GraywolfAppError('AUTH_SESSION_MISSING', 'Session token is missing');
     }
 

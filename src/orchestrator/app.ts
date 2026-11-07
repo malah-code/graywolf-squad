@@ -12,6 +12,7 @@ import { taskRoutes } from './routes/tasks';
 import { telemetryRoutes } from './routes/telemetry';
 import { vcsWebhookRoutes } from './routes/webhooks-vcs';
 import { chatRoutes } from './routes/chat';
+import { datasetRoutes } from './routes/dataset';
 
 export interface AppOptions extends FastifyServerOptions {
   disableRequestLogging?: boolean;
@@ -60,6 +61,7 @@ export function buildApp(opts: AppOptions = {}): FastifyInstance {
   fastify.register(telemetryRoutes, { prefix: '/api/v1/telemetry' });
   fastify.register(vcsWebhookRoutes, { prefix: '/api/v1/webhooks/vcs' });
   fastify.register(chatRoutes, { prefix: '/api/v1/chat' });
+  fastify.register(datasetRoutes);
 
   return fastify;
 }

@@ -175,13 +175,18 @@ export function requirePermission(
 
     // 2. Verify stateful session
     const session = await verifySession(sessionId);
-    request.user = session;
+    const effectiveRole =
+      process.env.DEPLOYMENT_TOPOLOGY === 'solo' && typeof request.headers['x-user-role'] === 'string'
+        ? (request.headers['x-user-role'] as WorkspaceRole)
+        : session.role;
+    const effectiveSession: SessionData = { ...session, role: effectiveRole };
+    request.user = effectiveSession;
     request.tenantContext = {
       workspaceId: session.currentWorkspaceId,
       orgId: session.currentOrganizationId,
     };
 
     // 3. Enforce Casbin RBAC for user role
-    await enforcePermission(session.role, action, options);
+    await enforcePermission(effectiveSession.role, action, options);
   };
 }

@@ -41,6 +41,7 @@ export interface LiteLLMCompletionResponse {
   model: string;
   provider: string;
   content: string;
+  reasoningContent?: string;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -78,6 +79,7 @@ export interface SpendLedgerHook {
 
 export interface LiteLLMClientOptions {
   baseUrl?: string;
+  apiKey?: string;
   fetchFn?: typeof fetch;
   circuitBreaker?: CircuitBreakerRegistry;
   telemetry?: GatewayTelemetry;
@@ -87,6 +89,7 @@ export interface LiteLLMClientOptions {
 
 export class LiteLLMClient {
   private readonly baseUrl: string;
+  private readonly apiKey?: string;
   private readonly fetchFn: typeof fetch;
   private readonly circuitBreaker: CircuitBreakerRegistry;
   private readonly telemetry: GatewayTelemetry;
@@ -95,6 +98,7 @@ export class LiteLLMClient {
 
   constructor(options?: LiteLLMClientOptions) {
     this.baseUrl = (options?.baseUrl ?? env.LITELLM_URL).replace(/\/+$/, '');
+    this.apiKey = options?.apiKey ?? process.env.LITELLM_MASTER_KEY;
     this.fetchFn = options?.fetchFn ?? globalThis.fetch;
     this.telemetry = options?.telemetry ?? new GatewayTelemetry();
     this.circuitBreaker =
@@ -103,7 +107,11 @@ export class LiteLLMClient {
         onTransition: (evt) => this.telemetry.recordCircuitTransition(evt),
       });
     this.spendLedger = options?.spendLedger;
-    this.requestTimeoutMs = options?.requestTimeoutMs ?? 30_000;
+    this.requestTimeoutMs =
+      options?.requestTimeoutMs ??
+      (process.env.LITELLM_REQUEST_TIMEOUT_MS
+        ? parseInt(process.env.LITELLM_REQUEST_TIMEOUT_MS, 10)
+        : 120_000);
   }
 
   public getCircuitBreaker(): CircuitBreakerRegistry {
@@ -243,6 +251,7 @@ export class LiteLLMClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
           ...(request.providerHint ? { 'x-provider-hint': request.providerHint } : {}),
         },
         body: JSON.stringify({
@@ -326,7 +335,11 @@ export class LiteLLMClient {
       const cacheReadTokens = data.usage?.cache_read_tokens ?? 0;
       const cacheWriteTokens = data.usage?.cache_creation_tokens ?? 0;
       const costUsd = data.usage?.cost ?? 0;
-      const content = data.choices?.[0]?.message?.content ?? '';
+      const choiceMsg = data.choices?.[0]?.message as
+        | { content?: string; reasoning_content?: string; reasoning?: string }
+        | undefined;
+      const reasoning = choiceMsg?.reasoning_content || choiceMsg?.reasoning;
+      const content = choiceMsg?.content || (reasoning ? '' : '');
 
       const response: LiteLLMCompletionResponse = {
         id: data.id ?? `call-${Date.now()}`,
@@ -334,7 +347,8 @@ export class LiteLLMClient {
         usedFallback: isFallback,
         model: resolvedModel,
         provider: resolvedProvider,
-        content,
+        content: content || reasoning || '',
+        reasoningContent: reasoning,
         inputTokens,
         outputTokens,
         cacheReadTokens,

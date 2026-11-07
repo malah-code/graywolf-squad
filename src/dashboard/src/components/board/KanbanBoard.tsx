@@ -29,10 +29,13 @@ export interface KanbanColumn {
 export interface KanbanTaskItem {
   id: string;
   title: string;
+  description?: string;
   status: TaskStatus;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   spendUsd: number;
   assignedTier?: string | null;
+  blockedBy?: string[];
+  writableScope?: string[];
 }
 
 export function getKanbanColumnsForView(options: {
@@ -301,6 +304,19 @@ export function KanbanBoard({
         </div>
       </div>
 
+      {/* Empty State Banner if no tasks */}
+      {tasks.length === 0 && (
+        <div data-testid="empty-board-banner" className="mx-3 mt-3 p-3 rounded-xl bg-slate-900/90 border border-dashed border-slate-700/80 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="text-xl">✨</span>
+            <div>
+              <p className="text-xs font-bold text-slate-200">No tasks in this project yet</p>
+              <p className="text-[11px] text-slate-400">Switch to the Cockpit view to chat with the agent squad and plan tasks.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Columns Grid */}
       <div className="flex-1 min-h-0 flex overflow-x-auto p-3 space-x-3">
         {viewConfig.columns.map((column) => {
@@ -351,6 +367,30 @@ export function KanbanBoard({
                       <p className="text-xs font-semibold text-slate-200 line-clamp-2 leading-relaxed">
                         {task.title}
                       </p>
+
+                      {task.description && (
+                        <p
+                          data-testid={`kanban-task-desc-${task.id}`}
+                          className="text-[11px] text-slate-400 line-clamp-2 leading-snug"
+                        >
+                          {task.description
+                            .replace(/^#+\s+.*$/gm, '')
+                            .replace(/\*+/g, '')
+                            .replace(/---[\s\S]*$/m, '')
+                            .trim()}
+                        </p>
+                      )}
+
+                      {task.assignedTier && (
+                        <div className="flex items-center space-x-1 pt-0.5">
+                          <span
+                            data-testid={`kanban-task-tier-${task.id}`}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-950/70 text-indigo-300 border border-indigo-800/60"
+                          >
+                            🤖 {task.assignedTier}
+                          </span>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-slate-900 font-mono">
                         <span className="text-slate-400">Status: <span className="text-slate-300 font-semibold">{task.status}</span></span>
